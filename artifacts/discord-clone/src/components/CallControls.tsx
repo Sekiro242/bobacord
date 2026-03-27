@@ -1,6 +1,6 @@
-import { useWebRTC } from "@/hooks/use-webrtc";
+import { useVoiceSFU } from "@/hooks/use-voice-sfu";
 import { useAuth } from "@/hooks/use-auth";
-import { Mic, MicOff, PhoneOff, PhoneCall, Headphones, volume2 } from "lucide-react";
+import { Mic, MicOff, PhoneOff, PhoneCall, Headphones } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AudioPlayer } from "./AudioPlayer";
 
@@ -14,7 +14,7 @@ export function CallControls({ roomId, targetUserIds = [] }: CallControlsProps) 
     activeCallRoom, isMuted, isDeafened, remoteStreams,
     inviteToCall, joinCall, leaveCall, toggleMute, toggleDeafen,
     localSpeaking
-  } = useWebRTC();
+  } = useVoiceSFU();
   const { user } = useAuth();
 
   const inThisCall = activeCallRoom === roomId;
@@ -46,13 +46,13 @@ export function CallControls({ roomId, targetUserIds = [] }: CallControlsProps) 
       socketId: 'local',
       userId: user?.id,
       username: user?.username || 'You',
-      avatarUrl: user?.avatarUrl,
+      avatarUrl: (user as any)?.avatarUrl,
       isSpeaking: localSpeaking,
       isMuted,
       isDeafened,
       isLocal: true
     },
-    ...remoteStreams.map(rs => ({
+    ...remoteStreams.map((rs: any) => ({
       ...rs,
       isLocal: false
     }))
@@ -61,7 +61,7 @@ export function CallControls({ roomId, targetUserIds = [] }: CallControlsProps) 
   return (
     <div className="flex flex-col gap-4 w-full">
       {/* Hidden Audio Players */}
-      {remoteStreams.map(rs => (
+      {remoteStreams.map((rs: any) => (
         <AudioPlayer key={rs.socketId} stream={rs.stream} isDeafened={isDeafened} />
       ))}
 

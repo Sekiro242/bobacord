@@ -1,4 +1,4 @@
-import { useWebRTC } from "@/hooks/use-webrtc";
+import { useVoiceSFU } from "@/hooks/use-voice-sfu";
 import { useAuth } from "@/hooks/use-auth";
 import { Mic, MicOff, PhoneOff, Headphones, MonitorUp, Video, VideoOff, GripHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -8,7 +8,7 @@ import { useLocation, useLocation as useWouterLocation } from "wouter";
 
 // Shared function to get all participants
 function useParticipants() {
-  const { localStream, localSpeaking, isMuted, isDeafened, isVideoOn, isScreenSharing, remoteStreams } = useWebRTC();
+  const { localStream, localSpeaking, isMuted, isDeafened, isVideoOn, isScreenSharing, remoteStreams } = useVoiceSFU();
   const { user } = useAuth();
   
   return [
@@ -25,7 +25,7 @@ function useParticipants() {
       isScreenSharing,
       isLocal: true
     },
-    ...remoteStreams.map(rs => ({ ...rs, isLocal: false }))
+    ...remoteStreams.map((rs: any) => ({ ...rs, isLocal: false }))
   ];
 }
 
@@ -112,7 +112,7 @@ function VideoNode({ participant, iAmDeafened, className, hideName }: { particip
 
 // Inline Call UI (For ChatArea)
 export function InRoomCallUI() {
-  const { isMuted, isDeafened, isVideoOn, isScreenSharing, toggleMute, toggleDeafen, toggleVideo, toggleScreenShare, leaveCall } = useWebRTC();
+  const { isMuted, isDeafened, isVideoOn, isScreenSharing, toggleMute, toggleDeafen, toggleVideo, toggleScreenShare, leaveCall } = useVoiceSFU();
   const participants = useParticipants();
 
   return (
@@ -176,7 +176,7 @@ export function InRoomCallUI() {
 
 // Floating Call Widget (For everywhere else)
 export function FloatingCallWidget() {
-  const { activeCallRoom, isDeafened, leaveCall } = useWebRTC();
+  const { activeCallRoom, isDeafened, leaveCall } = useVoiceSFU();
   const { user } = useAuth();
   const [location] = useLocation();
   const participants = useParticipants();

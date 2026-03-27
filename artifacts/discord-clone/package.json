@@ -75,6 +75,7 @@
     "zod": "3.25.76"
   },
   "dependencies": {
+    "mediasoup-client": "^3.18.7",
     "socket.io-client": "^4.8.3"
   }
 }

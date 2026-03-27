@@ -6,7 +6,7 @@ import { useAuth, getAuthHeaders } from "@/hooks/use-auth";
 import { useGetDmMessages, useGetGroupMessages, type Message } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { useWebRTC } from "@/hooks/use-webrtc";
+import { useVoiceSFU } from "@/hooks/use-voice-sfu";
 import { InRoomCallUI } from "@/components/ActiveCallOverlay";
 
 interface ChatAreaProps {
@@ -19,7 +19,7 @@ interface ChatAreaProps {
 export function ChatArea({ type, id, name, targetUserIds = [] }: ChatAreaProps) {
   const { user } = useAuth();
   const { socket } = useSocket();
-  const { activeCallRoom, joinCall, inviteToCall } = useWebRTC();
+  const { activeCallRoom, joinCall, inviteToCall } = useVoiceSFU();
   const queryClient = useQueryClient();
   const [newMessage, setNewMessage] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);

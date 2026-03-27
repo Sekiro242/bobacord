@@ -230,7 +230,7 @@ export function WebRTCProvider({ children }: { children: React.ReactNode }) {
           }
           iceCandidateQueueRef.current.delete(from);
         }
-        
+
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         console.log(`[WebRTC] Answer created → ${fromUsername}`);
@@ -455,7 +455,7 @@ export function WebRTCProvider({ children }: { children: React.ReactNode }) {
         if (videoTrack) {
           videoTrack.stop();
           localStreamRef.current.removeTrack(videoTrack);
-          
+
           peersRef.current.forEach(async (pc, targetSocketId) => {
             const sender = pc.getSenders().find(s => s.track === videoTrack);
             if (sender) {
@@ -464,7 +464,7 @@ export function WebRTCProvider({ children }: { children: React.ReactNode }) {
                 const offer = await pc.createOffer();
                 await pc.setLocalDescription(offer);
                 socket?.emit('webrtc_offer', { to: targetSocketId, offer, avatarUrl: (user as any)?.avatarUrl || null });
-              } catch(e) { console.error('[WebRTC] Peer removed-track renegotiation failed', e); }
+              } catch (e) { console.error('[WebRTC] Peer removed-track renegotiation failed', e); }
             }
           });
         }
@@ -476,16 +476,16 @@ export function WebRTCProvider({ children }: { children: React.ReactNode }) {
         const videoTrack = newStream.getVideoTracks()[0];
         localStreamRef.current.addTrack(videoTrack);
         setIsVideoOn(true);
-        
+
         peersRef.current.forEach(async (pc, targetSocketId) => {
           pc.addTrack(videoTrack, localStreamRef.current!);
           try {
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
             socket?.emit('webrtc_offer', { to: targetSocketId, offer, avatarUrl: (user as any)?.avatarUrl || null });
-          } catch(e) { console.error('[WebRTC] Peer added-track renegotiation failed', e); }
+          } catch (e) { console.error('[WebRTC] Peer added-track renegotiation failed', e); }
         });
-        
+
         socket?.emit('video_status', { roomId: activeCallRoom, isVideoOn: true });
         setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
       }
@@ -503,7 +503,7 @@ export function WebRTCProvider({ children }: { children: React.ReactNode }) {
           const track = tracks[tracks.length - 1]; // Assume last video track is screen sharing context
           track.stop();
           localStreamRef.current.removeTrack(track);
-          
+
           peersRef.current.forEach(async (pc, targetSocketId) => {
             const sender = pc.getSenders().find(s => s.track === track);
             if (sender) {
@@ -512,7 +512,7 @@ export function WebRTCProvider({ children }: { children: React.ReactNode }) {
                 const offer = await pc.createOffer();
                 await pc.setLocalDescription(offer);
                 socket?.emit('webrtc_offer', { to: targetSocketId, offer, avatarUrl: (user as any)?.avatarUrl || null });
-              } catch(e) {}
+              } catch (e) { }
             }
           });
         }
@@ -522,39 +522,39 @@ export function WebRTCProvider({ children }: { children: React.ReactNode }) {
       } else {
         const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
         const screenTrack = displayStream.getVideoTracks()[0];
-        
+
         screenTrack.onended = () => {
           setIsScreenSharing(false);
           socket?.emit('screen_status', { roomId: activeCallRoom, isScreenSharing: false });
           if (localStreamRef.current) {
             localStreamRef.current.removeTrack(screenTrack);
             peersRef.current.forEach(async (pc, targetSocketId) => {
-               const sender = pc.getSenders().find(s => s.track === screenTrack);
-               if (sender) {
-                 pc.removeTrack(sender);
-                 try {
-                   const offer = await pc.createOffer();
-                   await pc.setLocalDescription(offer);
-                   socket?.emit('webrtc_offer', { to: targetSocketId, offer, avatarUrl: (user as any)?.avatarUrl || null });
-                 } catch(e) {}
-               }
+              const sender = pc.getSenders().find(s => s.track === screenTrack);
+              if (sender) {
+                pc.removeTrack(sender);
+                try {
+                  const offer = await pc.createOffer();
+                  await pc.setLocalDescription(offer);
+                  socket?.emit('webrtc_offer', { to: targetSocketId, offer, avatarUrl: (user as any)?.avatarUrl || null });
+                } catch (e) { }
+              }
             });
             setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
           }
         };
-        
+
         localStreamRef.current.addTrack(screenTrack);
         setIsScreenSharing(true);
-        
+
         peersRef.current.forEach(async (pc, targetSocketId) => {
           pc.addTrack(screenTrack, localStreamRef.current!);
           try {
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
             socket?.emit('webrtc_offer', { to: targetSocketId, offer, avatarUrl: (user as any)?.avatarUrl || null });
-          } catch(e) {}
+          } catch (e) { }
         });
-        
+
         socket?.emit('screen_status', { roomId: activeCallRoom, isScreenSharing: true });
         setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
       }
