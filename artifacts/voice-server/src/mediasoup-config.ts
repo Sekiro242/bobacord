@@ -10,14 +10,49 @@ export const workerSettings: WorkerSettings = {
 };
 
 // ─── Router media codecs ───────────────────────────────────────────────────────
-// Opus is THE codec for WebRTC voice — 48kHz, stereo capable, low latency
+// Supports: Opus audio + VP8 / VP9 / H264 video
 
 export const mediaCodecs: RtpCodecCapability[] = [
+  // ── Audio ──
   {
     kind: "audio",
     mimeType: "audio/opus",
     clockRate: 48000,
     channels: 2,
+  },
+
+  // ── Video: VP8 (widest browser support) ──
+  {
+    kind: "video",
+    mimeType: "video/VP8",
+    clockRate: 90000,
+    parameters: {
+      "x-google-start-bitrate": 1000,
+    },
+  },
+
+  // ── Video: VP9 (better quality / compression than VP8) ──
+  {
+    kind: "video",
+    mimeType: "video/VP9",
+    clockRate: 90000,
+    parameters: {
+      "profile-id": 2,
+      "x-google-start-bitrate": 1000,
+    },
+  },
+
+  // ── Video: H264 (hardware acceleration on most devices) ──
+  {
+    kind: "video",
+    mimeType: "video/H264",
+    clockRate: 90000,
+    parameters: {
+      "packetization-mode": 1,
+      "profile-level-id": "4d0032",
+      "level-asymmetry-allowed": 1,
+      "x-google-start-bitrate": 1000,
+    },
   },
 ];
 
@@ -39,10 +74,10 @@ export function getWebRtcTransportOptions(): WebRtcTransportOptions {
         announcedAddress: announcedIp,
       },
     ],
-    // Allow SCTP (data channels) — not used currently but enables future text
     enableSctp: false,
     enableTcp: true,
     preferUdp: true,
-    initialAvailableOutgoingBitrate: 800000,
+    // Higher bitrate ceiling for video
+    initialAvailableOutgoingBitrate: 1_500_000,
   };
 }

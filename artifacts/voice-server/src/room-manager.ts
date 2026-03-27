@@ -17,7 +17,14 @@ export interface PeerInfo {
   avatarUrl?: string | null;
   sendTransport: WebRtcTransport | null;
   recvTransport: WebRtcTransport | null;
-  producer: Producer | null;
+  /**
+   * All active producers for this peer.
+   * A peer can have up to 3 simultaneous producers:
+   *   audio  (streamType: "audio")
+   *   camera (streamType: "camera")
+   *   screen (streamType: "screen")
+   */
+  producers: Map<string, Producer>; // producerId → Producer
   consumers: Map<string, Consumer>; // producerId → Consumer
 }
 
@@ -72,7 +79,6 @@ class RoomManager {
     const room = await this.getOrCreateRoom(roomId);
 
     if (room.peers.has(peerId)) {
-      // already in room — return existing
       return { room, peer: room.peers.get(peerId)! };
     }
 
@@ -83,7 +89,7 @@ class RoomManager {
       avatarUrl,
       sendTransport: null,
       recvTransport: null,
-      producer: null,
+      producers: new Map(),
       consumers: new Map(),
     };
 
@@ -166,97 +172,173 @@ class RoomManager {
     logger.info({ peerId, transportId }, "Transport connected");
   }
 
-  // Start producing (client is sending audio)
+  // Start producing — supports multiple producers per peer (audio, camera, screen)
   async produce(
     roomId: string,
     peerId: string,
     kind: "audio" | "video",
-    rtpParameters: any
+    rtpParameters: any,
+    appData?: Record<string, unknown>
   ): Promise<Producer> {
     const room = this.rooms.get(roomId);
     const peer = room?.peers.get(peerId);
     if (!room || !peer || !peer.sendTransport)
       throw new Error(`Send transport not ready for peer ${peerId}`);
 
-    const producer = await peer.sendTransport.produce({ kind, rtpParameters });
+    const producer = await peer.sendTransport.produce({
+      kind,
+      rtpParameters,
+      appData: appData || {},
+    });
 
     producer.on("transportclose", () => {
       logger.info({ peerId, producerId: producer.id }, "Producer transport closed");
+      peer.producers.delete(producer.id);
       producer.close();
     });
 
-    peer.producer = producer;
-    logger.info({ roomId, peerId, producerId: producer.id }, "Producer created");
+    peer.producers.set(producer.id, producer);
+    logger.info(
+      { roomId, peerId, producerId: producer.id, kind, streamType: (appData as any)?.streamType || "unknown" },
+      "Producer created"
+    );
     return producer;
   }
 
-  // Create a consumer for a peer to receive another peer's audio
+  // Stop a specific producer (camera off / screen share ended)
+  stopProducer(
+    roomId: string,
+    peerId: string,
+    producerId: string
+  ): { streamType: string } {
+    const room = this.rooms.get(roomId);
+    const peer = room?.peers.get(peerId);
+    if (!room || !peer) throw new Error(`Peer ${peerId} not found in room ${roomId}`);
+
+    const producer = peer.producers.get(producerId);
+    if (!producer) throw new Error(`Producer ${producerId} not found for peer ${peerId}`);
+
+    const streamType = (producer.appData as any)?.streamType || "unknown";
+    producer.close();
+    peer.producers.delete(producerId);
+
+    logger.info({ roomId, peerId, producerId, streamType }, "Producer stopped");
+    return { streamType };
+  }
+
+  // Create a consumer for a peer to receive another peer's stream by producerId
   async consume(
     roomId: string,
     consumerPeerId: string,
-    producerPeerId: string,
+    producerId: string,
     rtpCapabilities: any
-  ): Promise<{ consumer: Consumer; producerInfo: PeerInfo }> {
+  ): Promise<{ consumer: Consumer; producerPeer: PeerInfo }> {
     const room = this.rooms.get(roomId);
     const consumerPeer = room?.peers.get(consumerPeerId);
-    const producerPeer = room?.peers.get(producerPeerId);
 
-    if (!room || !consumerPeer || !producerPeer)
-      throw new Error(`Peers not found in room ${roomId}`);
-
-    if (!producerPeer.producer)
-      throw new Error(`Producer peer ${producerPeerId} has no active producer`);
+    if (!room || !consumerPeer)
+      throw new Error(`Consumer peer ${consumerPeerId} not found in room ${roomId}`);
 
     if (!consumerPeer.recvTransport)
       throw new Error(`Consumer peer ${consumerPeerId} has no recv transport`);
 
-    if (!room.router.canConsume({ producerId: producerPeer.producer.id, rtpCapabilities }))
-      throw new Error(`Router cannot consume producer ${producerPeer.producer.id}`);
+    // Find the producer by ID across all peers in the room
+    let targetProducer: Producer | null = null;
+    let producerPeer: PeerInfo | null = null;
+
+    for (const peer of room.peers.values()) {
+      const p = peer.producers.get(producerId);
+      if (p && !p.closed) {
+        targetProducer = p;
+        producerPeer = peer;
+        break;
+      }
+    }
+
+    if (!targetProducer || !producerPeer)
+      throw new Error(`Producer ${producerId} not found in room ${roomId}`);
+
+    if (!room.router.canConsume({ producerId: targetProducer.id, rtpCapabilities }))
+      throw new Error(`Router cannot consume producer ${producerId}`);
 
     const consumer = await consumerPeer.recvTransport.consume({
-      producerId: producerPeer.producer.id,
+      producerId: targetProducer.id,
       rtpCapabilities,
       paused: false,
     });
 
     consumer.on("transportclose", () => {
       logger.info({ consumerPeerId, consumerId: consumer.id }, "Consumer transport closed");
+      consumerPeer.consumers.delete(producerId);
     });
 
     consumer.on("producerclose", () => {
       logger.info({ consumerPeerId, consumerId: consumer.id }, "Producer closed — removing consumer");
-      consumerPeer.consumers.delete(producerPeer.producer!.id);
+      consumerPeer.consumers.delete(producerId);
     });
 
-    consumerPeer.consumers.set(producerPeer.producer.id, consumer);
+    consumerPeer.consumers.set(producerId, consumer);
     logger.info(
-      { roomId, consumerPeerId, producerPeerId, consumerId: consumer.id },
+      {
+        roomId,
+        consumerPeerId,
+        producerPeerId: producerPeer.peerId,
+        producerId,
+        consumerId: consumer.id,
+        kind: consumer.kind,
+      },
       "Consumer created"
     );
 
-    return { consumer, producerInfo: producerPeer };
+    return { consumer, producerPeer };
   }
 
   // Get all existing producers in a room except the requesting peer
+  // Returns one entry per producer (including audio, camera, screen)
   getExistingProducers(
     roomId: string,
     excludePeerId: string
-  ): Array<{ peerId: string; producerId: string; userId: number; username: string; avatarUrl?: string | null }> {
+  ): Array<{
+    peerId: string;
+    producerId: string;
+    kind: "audio" | "video";
+    streamType: string;
+    userId: number;
+    username: string;
+    avatarUrl?: string | null;
+  }> {
     const room = this.rooms.get(roomId);
     if (!room) return [];
 
-    const result: Array<{ peerId: string; producerId: string; userId: number; username: string; avatarUrl?: string | null }> = [];
+    const result: Array<{
+      peerId: string;
+      producerId: string;
+      kind: "audio" | "video";
+      streamType: string;
+      userId: number;
+      username: string;
+      avatarUrl?: string | null;
+    }> = [];
+
     for (const [peerId, peer] of room.peers) {
-      if (peerId !== excludePeerId && peer.producer && !peer.producer.closed) {
-        result.push({
-          peerId,
-          producerId: peer.producer.id,
-          userId: peer.userId,
-          username: peer.username,
-          avatarUrl: peer.avatarUrl,
-        });
+      if (peerId === excludePeerId) continue;
+      for (const [producerId, producer] of peer.producers) {
+        if (!producer.closed) {
+          result.push({
+            peerId,
+            producerId,
+            kind: producer.kind,
+            streamType:
+              (producer.appData as any)?.streamType ||
+              (producer.kind === "audio" ? "audio" : "camera"),
+            userId: peer.userId,
+            username: peer.username,
+            avatarUrl: peer.avatarUrl,
+          });
+        }
       }
     }
+
     return result;
   }
 
@@ -273,8 +355,10 @@ class RoomManager {
       consumer.close();
     }
 
-    // Close this peer's producer
-    peer.producer?.close();
+    // Close all of this peer's producers
+    for (const producer of peer.producers.values()) {
+      producer.close();
+    }
 
     // Close transports
     peer.sendTransport?.close();

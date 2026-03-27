@@ -268,6 +268,23 @@ export function setupSocket(httpServer: HttpServer) {
         isDeafened,
       });
     });
+
+    // ── Video presence state (UI indicator — media uses voice:producer-new) ────
+    socket.on("video_status", ({ roomId, isVideoOn }: { roomId: string; isVideoOn: boolean }) => {
+      socket.to(`voice_${roomId}`).emit("video_status", {
+        socketId: socket.id,
+        userId: user.id,
+        isVideoOn,
+      });
+    });
+
+    socket.on("screenshare_status", ({ roomId, isScreenSharing }: { roomId: string; isScreenSharing: boolean }) => {
+      socket.to(`voice_${roomId}`).emit("screenshare_status", {
+        socketId: socket.id,
+        userId: user.id,
+        isScreenSharing,
+      });
+    });
   });
 
   // ─── Helper: leave a voice room ─────────────────────────────────────────────
