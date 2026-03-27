@@ -1,10 +1,10 @@
-import { useWebRTC } from "@/hooks/use-webrtc";
+import { useVoiceSFU } from "@/hooks/use-voice-sfu";
 import { Phone, PhoneOff } from "lucide-react";
 import { useEffect } from "react";
 import { useLocation } from "wouter";
 
 export function IncomingCallModal() {
-  const { incomingCall, acceptCall, declineCall } = useWebRTC();
+  const { incomingCall, acceptCall, declineCall } = useVoiceSFU();
   const [, setLocation] = useLocation();
 
   const handleAccept = async () => {

@@ -7,8 +7,9 @@ import Login from "@/pages/login";
 import Register from "@/pages/register";
 import Home from "@/pages/home";
 import { SocketProvider } from "@/hooks/use-socket";
-import { WebRTCProvider, useWebRTC } from "@/hooks/use-webrtc";
+import { VoiceSFUProvider, useVoiceSFU } from "@/hooks/use-voice-sfu";
 import { IncomingCallModal } from "@/components/IncomingCallModal";
+import { FloatingCallWidget } from "@/components/ActiveCallOverlay";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -32,11 +33,9 @@ function Router() {
   );
 }
 
-import { FloatingCallWidget } from "@/components/ActiveCallOverlay";
-
-// Separate component so it can use the WebRTC context
+// Separate component so it can use the VoiceSFU context
 function AppWithCallModal() {
-  const { incomingCall, acceptCall, declineCall } = useWebRTC();
+  const { incomingCall } = useVoiceSFU();
 
   return (
     <>
@@ -54,11 +53,11 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <SocketProvider>
-        <WebRTCProvider>
+        <VoiceSFUProvider>
           <TooltipProvider>
             <AppWithCallModal />
           </TooltipProvider>
-        </WebRTCProvider>
+        </VoiceSFUProvider>
       </SocketProvider>
     </QueryClientProvider>
   );

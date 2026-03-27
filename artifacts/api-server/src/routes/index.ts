@@ -5,6 +5,7 @@ import usersRouter from "./users";
 import friendsRouter from "./friends";
 import messagesRouter from "./messages";
 import groupsRouter from "./groups";
+import voiceRouter from "./voice";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use("/users", usersRouter);
 router.use("/friends", friendsRouter);
 router.use("/messages", messagesRouter);
 router.use("/groups", groupsRouter);
+router.use("/voice", voiceRouter);
 
 export default router;

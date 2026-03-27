@@ -6,20 +6,25 @@ import { messagesTable, groupMembersTable, usersTable } from "@workspace/db/sche
 import { eq } from "drizzle-orm";
 import { logger } from "./lib/logger.js";
 
-interface CallRoom {
-  users: Map<string, { userId: number; username: string; avatarUrl?: string | null }>;
+// ─── In-memory voice room presence ───────────────────────────────────────────
+// Only tracks who is in which room — media is handled by voice-server.
+interface VoicePeer {
+  userId: number;
+  username: string;
+  avatarUrl?: string | null;
+  peerId: string; // "user_{userId}"
 }
 
-const callRooms = new Map<string, CallRoom>();
+const voiceRooms = new Map<string, Map<string, VoicePeer>>(); // roomId → socketId → peer
 
 export function setupSocket(httpServer: HttpServer) {
   const io = new SocketServer(httpServer, {
     cors: { origin: "*" },
     path: "/socket.io",
-    // Allow both polling and websocket so it works behind all proxies
     transports: ["polling", "websocket"],
   });
 
+  // ─── Auth middleware ────────────────────────────────────────────────────────
   io.use((socket, next) => {
     const token = socket.handshake.auth.token as string;
     if (!token) {
@@ -41,14 +46,16 @@ export function setupSocket(httpServer: HttpServer) {
     const user = (socket as any).user as { id: number; username: string };
     logger.info({ userId: user.id, username: user.username, socketId: socket.id }, "Socket connected");
 
-    // Each user joins their own room for targeted messages
+    // Personal room for targeted messages (DMs, call invites etc.)
     socket.join(`user_${user.id}`);
 
+    // ── Disconnect: clean up voice rooms ────────────────────────────────────
     socket.on("disconnect", (reason) => {
       logger.info({ userId: user.id, socketId: socket.id, reason }, "Socket disconnected");
-      for (const [roomId, room] of callRooms.entries()) {
-        if (room.users.has(socket.id)) {
-          leaveCall(socket, roomId, user);
+      // Remove from any active voice rooms on disconnect
+      for (const [roomId, peers] of voiceRooms.entries()) {
+        if (peers.has(socket.id)) {
+          leaveVoiceRoom(socket, roomId, user);
         }
       }
     });
@@ -81,7 +88,6 @@ export function setupSocket(httpServer: HttpServer) {
         };
 
         logger.info({ msgId: msg.id, to: data.toUserId }, "dm_message saved, broadcasting");
-        // Send to sender (confirming send) and to receiver
         socket.emit("dm_message", payload);
         io.to(`user_${data.toUserId}`).emit("dm_message", payload);
       } catch (err) {
@@ -137,32 +143,24 @@ export function setupSocket(httpServer: HttpServer) {
     });
 
     // ─── CALL RINGING SYSTEM ──────────────────────────────────────────────────
+    // (Unchanged — this is UI signaling, not media signaling)
 
-    // Caller invites someone to a call before joining
-    // data: { roomId, targetUserIds: number[] }
     socket.on("call:invite", (data: { roomId: string; targetUserIds: number[] }) => {
       const { roomId, targetUserIds } = data;
       if (!roomId || !targetUserIds?.length) return;
-
       logger.info({ from: user.id, roomId, targetUserIds }, "call:invite emitted");
-
-      // Notify each target user of the incoming call
       for (const targetId of targetUserIds) {
         io.to(`user_${targetId}`).emit("incoming_call", {
           roomId,
           callerId: user.id,
           callerName: user.username,
         });
-        logger.info({ targetId, roomId }, "incoming_call sent");
       }
     });
 
-    // Target accepts the call
-    // data: { roomId, callerId: number }
     socket.on("call:accept", (data: { roomId: string; callerId: number }) => {
       const { roomId, callerId } = data;
       logger.info({ from: user.id, roomId, callerId }, "call:accept");
-      // Notify the caller that this user accepted
       io.to(`user_${callerId}`).emit("call:accepted", {
         roomId,
         acceptedBy: user.id,
@@ -170,8 +168,6 @@ export function setupSocket(httpServer: HttpServer) {
       });
     });
 
-    // Target declines the call
-    // data: { roomId, callerId: number }
     socket.on("call:decline", (data: { roomId: string; callerId: number }) => {
       const { roomId, callerId } = data;
       logger.info({ from: user.id, roomId, callerId }, "call:decline");
@@ -182,108 +178,119 @@ export function setupSocket(httpServer: HttpServer) {
       });
     });
 
-    // ─── VOICE CALL (WebRTC SIGNALING) ────────────────────────────────────────
+    // ─── VOICE CHANNEL (SFU presence tracking) ───────────────────────────────
+    // Media is handled by voice-server via REST.
+    // Socket is used for: room join/leave presence + UI state events.
 
-    socket.on("join_call", async (data: { roomId: string }) => {
-      const { roomId } = data;
+    socket.on("voice:join-room", async (data: { roomId: string; avatarUrl?: string | null }) => {
+      const { roomId, avatarUrl } = data;
       if (!roomId) return;
 
-      if (!callRooms.has(roomId)) {
-        callRooms.set(roomId, { users: new Map() });
+      if (!voiceRooms.has(roomId)) {
+        voiceRooms.set(roomId, new Map());
       }
-      const room = callRooms.get(roomId)!;
+      const peers = voiceRooms.get(roomId)!;
 
-      if (room.users.size >= 10) {
-        logger.warn({ roomId, userId: user.id }, "join_call: room full");
-        socket.emit("call_full", { roomId });
-        return;
+      // Fetch avatarUrl if not provided
+      let resolvedAvatarUrl = avatarUrl || null;
+      if (!resolvedAvatarUrl) {
+        try {
+          const [dbUser] = await db
+            .select({ avatarUrl: usersTable.avatarUrl })
+            .from(usersTable)
+            .where(eq(usersTable.id, user.id))
+            .limit(1);
+          resolvedAvatarUrl = dbUser?.avatarUrl || null;
+        } catch (e) {
+          logger.error({ e }, "Error fetching avatarUrl for voice join");
+        }
       }
 
-      // Fetch avatar URL from DB since it's not in the JWT
-      let avatarUrl: string | null = null;
-      try {
-        const [dbUser] = await db.select({ avatarUrl: usersTable.avatarUrl }).from(usersTable).where(eq(usersTable.id, user.id)).limit(1);
-        avatarUrl = dbUser?.avatarUrl || null;
-      } catch (e) {
-        logger.error({ e }, "Error fetching avatarUrl for call");
-      }
-
-      const existingUsers = Array.from(room.users.entries()).map(([sid, u]) => ({
-        socketId: sid,
-        userId: u.userId,
-        username: u.username,
-        avatarUrl: u.avatarUrl,
-      }));
-
-      room.users.set(socket.id, { userId: user.id, username: user.username, avatarUrl });
-      socket.join(roomId);
-
-      logger.info({ roomId, userId: user.id, existingCount: existingUsers.length }, "join_call: joined");
-      socket.emit("room_users", { roomId, users: existingUsers });
-
-      // Tell others someone joined
-      socket.to(roomId).emit("user_joined_call", {
-        socketId: socket.id,
+      const peer: VoicePeer = {
         userId: user.id,
         username: user.username,
-        avatarUrl,
+        avatarUrl: resolvedAvatarUrl,
+        peerId: `user_${user.id}`,
+      };
+
+      // Join the socket room for this voice channel
+      socket.join(`voice_${roomId}`);
+      peers.set(socket.id, peer);
+
+      // Send existing peers list back to the joiner
+      const existingPeers = Array.from(peers.entries())
+        .filter(([sid]) => sid !== socket.id)
+        .map(([sid, p]) => ({ socketId: sid, ...p }));
+
+      socket.emit("voice:room-peers", { roomId, peers: existingPeers });
+
+      // Notify others that a new peer joined
+      socket.to(`voice_${roomId}`).emit("voice:peer-joined", {
+        socketId: socket.id,
+        peerId: peer.peerId,
+        userId: user.id,
+        username: user.username,
+        avatarUrl: resolvedAvatarUrl,
       });
+
+      logger.info({ roomId, userId: user.id, peerId: peer.peerId }, "User joined voice room (socket)");
     });
 
-    socket.on("leave_call", (data: { roomId: string }) => {
+    socket.on("voice:leave-room", (data: { roomId: string }) => {
       const { roomId } = data;
       if (!roomId) return;
-      leaveCall(socket, roomId, user);
+      leaveVoiceRoom(socket, roomId, user);
     });
 
-    // WebRTC signaling – relay offer/answer/ICE by socket ID (not user ID)
-    socket.on("webrtc_offer", (data: { to: string; offer: any; avatarUrl?: string | null }) => {
-      logger.info({ from: socket.id, to: data.to }, "webrtc_offer relaying");
-      io.to(data.to).emit("webrtc_offer", {
-        from: socket.id,
-        fromUserId: user.id,
-        fromUsername: user.username,
-        fromAvatarUrl: data.avatarUrl || null,
-        offer: data.offer,
+    // ─── UI STATE EVENTS (mute / deafen / speaking) ───────────────────────────
+    // These are cheap socket events — no media processing.
+
+    socket.on("speaking", ({ roomId, isSpeaking }: { roomId: string; isSpeaking: boolean }) => {
+      socket.to(`voice_${roomId}`).emit("speaking", {
+        socketId: socket.id,
+        userId: user.id,
+        isSpeaking,
       });
     });
 
-    socket.on("webrtc_answer", (data: { to: string; answer: any }) => {
-      logger.info({ from: socket.id, to: data.to }, "webrtc_answer relaying");
-      io.to(data.to).emit("webrtc_answer", {
-        from: socket.id,
-        answer: data.answer,
+    socket.on("mute_status", ({ roomId, isMuted }: { roomId: string; isMuted: boolean }) => {
+      socket.to(`voice_${roomId}`).emit("mute_status", {
+        socketId: socket.id,
+        userId: user.id,
+        isMuted,
       });
     });
 
-    socket.on("webrtc_ice", ({ to, candidate }) => {
-      socket.to(to).emit("webrtc_ice", { from: socket.id, candidate });
-    });
-
-    socket.on("speaking", ({ roomId, isSpeaking }) => {
-      socket.to(roomId).emit("speaking", { socketId: socket.id, userId: user.id, isSpeaking });
-    });
-
-    socket.on("mute_status", ({ roomId, isMuted }) => {
-      socket.to(roomId).emit("mute_status", { socketId: socket.id, userId: user.id, isMuted });
-    });
-
-    socket.on("deafen_status", ({ roomId, isDeafened }) => {
-      socket.to(roomId).emit("deafen_status", { socketId: socket.id, userId: user.id, isDeafened });
+    socket.on("deafen_status", ({ roomId, isDeafened }: { roomId: string; isDeafened: boolean }) => {
+      socket.to(`voice_${roomId}`).emit("deafen_status", {
+        socketId: socket.id,
+        userId: user.id,
+        isDeafened,
+      });
     });
   });
 
-  function leaveCall(socket: any, roomId: string, user: { id: number; username: string }) {
-    const room = callRooms.get(roomId);
-    if (!room) return;
-    room.users.delete(socket.id);
-    socket.leave(roomId);
-    if (room.users.size === 0) {
-      callRooms.delete(roomId);
+  // ─── Helper: leave a voice room ─────────────────────────────────────────────
+  function leaveVoiceRoom(
+    socket: any,
+    roomId: string,
+    user: { id: number; username: string }
+  ) {
+    const peers = voiceRooms.get(roomId);
+    if (!peers) return;
+
+    peers.delete(socket.id);
+    socket.leave(`voice_${roomId}`);
+
+    if (peers.size === 0) {
+      voiceRooms.delete(roomId);
     }
-    logger.info({ roomId, userId: user.id }, "leave_call");
-    io.to(roomId).emit("user_left_call", {
+
+    logger.info({ roomId, userId: user.id }, "User left voice room (socket)");
+
+    io.to(`voice_${roomId}`).emit("voice:peer-left", {
       socketId: socket.id,
+      peerId: `user_${user.id}`,
       userId: user.id,
       username: user.username,
     });
