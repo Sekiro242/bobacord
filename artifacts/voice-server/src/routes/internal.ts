@@ -17,7 +17,7 @@ router.use((req, res, next) => {
 // ─── POST /internal/join ──────────────────────────────────────────────────────
 // Called when a user joins a voice channel.
 // Creates Router (if needed), and two WebRTC transports (send + recv).
-// Returns: routerRtpCapabilities + both transport params.
+// Returns: routerRtpCapabilities + both transport params + existingProducers.
 router.post("/join", async (req, res) => {
   const { roomId, peerId, userId, username, avatarUrl } = req.body as {
     roomId: string;
@@ -42,7 +42,7 @@ router.post("/join", async (req, res) => {
       roomManager.createRecvTransport(roomId, peerId),
     ]);
 
-    // Existing producers the new peer should consume
+    // All existing producers (audio + camera + screen) the new peer should consume
     const existingProducers = roomManager.getExistingProducers(roomId, peerId);
 
     res.json({
@@ -88,14 +88,16 @@ router.post("/connect-transport", async (req, res) => {
 });
 
 // ─── POST /internal/produce ───────────────────────────────────────────────────
-// Client begins sending audio — server creates a Producer.
-// Returns producerId, which is broadcast to others so they can consume.
+// Client begins sending a track (audio, camera video, or screen share).
+// Returns producerId.
+// appData.streamType: "audio" | "camera" | "screen"
 router.post("/produce", async (req, res) => {
-  const { roomId, peerId, kind, rtpParameters } = req.body as {
+  const { roomId, peerId, kind, rtpParameters, appData } = req.body as {
     roomId: string;
     peerId: string;
     kind: "audio" | "video";
     rtpParameters: any;
+    appData?: { streamType?: string };
   };
 
   if (!roomId || !peerId || !kind || !rtpParameters) {
@@ -104,37 +106,66 @@ router.post("/produce", async (req, res) => {
   }
 
   try {
-    logger.info({ roomId, peerId, kind }, "[internal] produce");
-    const producer = await roomManager.produce(roomId, peerId, kind, rtpParameters);
-    res.json({ producerId: producer.id });
+    logger.info({ roomId, peerId, kind, streamType: appData?.streamType }, "[internal] produce");
+    const producer = await roomManager.produce(roomId, peerId, kind, rtpParameters, appData || {});
+    res.json({
+      producerId: producer.id,
+      streamType: (producer.appData as any)?.streamType || (kind === "audio" ? "audio" : "camera"),
+    });
   } catch (err: any) {
     logger.error({ err }, "[internal] produce error");
     res.status(500).json({ error: err.message });
   }
 });
 
-// ─── POST /internal/consume ───────────────────────────────────────────────────
-// Request to consume another peer's producer.
-// Returns consumer parameters the client needs to receive the stream.
-router.post("/consume", async (req, res) => {
-  const { roomId, consumerPeerId, producerPeerId, rtpCapabilities } = req.body as {
+// ─── POST /internal/stop-produce ─────────────────────────────────────────────
+// Close a specific producer (camera off or screen share ended) without
+// removing the peer from the room.
+// Returns { streamType } so the api-server can broadcast the right event.
+router.post("/stop-produce", (req, res) => {
+  const { roomId, peerId, producerId } = req.body as {
     roomId: string;
-    consumerPeerId: string;
-    producerPeerId: string;
-    rtpCapabilities: any;
+    peerId: string;
+    producerId: string;
   };
 
-  if (!roomId || !consumerPeerId || !producerPeerId || !rtpCapabilities) {
+  if (!roomId || !peerId || !producerId) {
     res.status(400).json({ error: "Missing required fields" });
     return;
   }
 
   try {
-    logger.info({ roomId, consumerPeerId, producerPeerId }, "[internal] consume");
-    const { consumer, producerInfo } = await roomManager.consume(
+    logger.info({ roomId, peerId, producerId }, "[internal] stop-produce");
+    const { streamType } = roomManager.stopProducer(roomId, peerId, producerId);
+    res.json({ stopped: true, streamType });
+  } catch (err: any) {
+    logger.error({ err }, "[internal] stop-produce error");
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── POST /internal/consume ───────────────────────────────────────────────────
+// Request to consume a specific producerId.
+// Client supplies the producerId it received from voice:producer-new.
+router.post("/consume", async (req, res) => {
+  const { roomId, consumerPeerId, producerId, rtpCapabilities } = req.body as {
+    roomId: string;
+    consumerPeerId: string;
+    producerId: string;
+    rtpCapabilities: any;
+  };
+
+  if (!roomId || !consumerPeerId || !producerId || !rtpCapabilities) {
+    res.status(400).json({ error: "Missing required fields" });
+    return;
+  }
+
+  try {
+    logger.info({ roomId, consumerPeerId, producerId }, "[internal] consume");
+    const { consumer, producerPeer } = await roomManager.consume(
       roomId,
       consumerPeerId,
-      producerPeerId,
+      producerId,
       rtpCapabilities
     );
 
@@ -143,10 +174,10 @@ router.post("/consume", async (req, res) => {
       producerId: consumer.producerId,
       kind: consumer.kind,
       rtpParameters: consumer.rtpParameters,
-      producerPeerId,
-      producerUserId: producerInfo.userId,
-      producerUsername: producerInfo.username,
-      producerAvatarUrl: producerInfo.avatarUrl,
+      producerPeerId: producerPeer.peerId,
+      producerUserId: producerPeer.userId,
+      producerUsername: producerPeer.username,
+      producerAvatarUrl: producerPeer.avatarUrl,
     });
   } catch (err: any) {
     logger.error({ err }, "[internal] consume error");
@@ -175,7 +206,7 @@ router.post("/leave", (req, res) => {
 });
 
 // ─── GET /internal/room/:roomId/peers ─────────────────────────────────────────
-// Get all active peers in a room (for api-server to broadcast to clients).
+// Get all active peers and their producer info.
 router.get("/room/:roomId/peers", (req, res) => {
   const { roomId } = req.params;
   const room = roomManager.getRoom(roomId);
@@ -189,7 +220,13 @@ router.get("/room/:roomId/peers", (req, res) => {
     userId: p.userId,
     username: p.username,
     avatarUrl: p.avatarUrl,
-    hasProducer: !!p.producer && !p.producer.closed,
+    producers: Array.from(p.producers.values())
+      .filter((pr) => !pr.closed)
+      .map((pr) => ({
+        producerId: pr.id,
+        kind: pr.kind,
+        streamType: (pr.appData as any)?.streamType || (pr.kind === "audio" ? "audio" : "camera"),
+      })),
   }));
 
   res.json({ peers });

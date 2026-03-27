@@ -10,7 +10,7 @@ const VOICE_SERVER_URL =
 const INTERNAL_SECRET =
   process.env.VOICE_INTERNAL_SECRET || "bobacord_internal_secret_dev_only";
 
-/** Proxy a request to the voice-server internal API */
+/** Proxy a POST request to the voice-server internal API */
 async function voiceProxy(path: string, body: object): Promise<any> {
   const url = `${VOICE_SERVER_URL}/internal${path}`;
   logger.info({ url }, "[voice-proxy] request");
@@ -24,17 +24,18 @@ async function voiceProxy(path: string, body: object): Promise<any> {
     body: JSON.stringify(body),
   });
 
-  const data = await res.json() as any;
+  const data = (await res.json()) as any;
   if (!res.ok) throw new Error(data.error || `Voice server error: ${res.status}`);
   return data;
 }
 
+/** Proxy a GET request to the voice-server internal API */
 async function voiceGet(path: string): Promise<any> {
   const url = `${VOICE_SERVER_URL}/internal${path}`;
   const res = await fetch(url, {
     headers: { "x-internal-secret": INTERNAL_SECRET },
   });
-  const data = await res.json() as any;
+  const data = (await res.json()) as any;
   if (!res.ok) throw new Error(data.error || `Voice server error: ${res.status}`);
   return data;
 }
@@ -61,7 +62,6 @@ router.use((req, res, next) => {
 
 // ─── POST /api/voice/join ─────────────────────────────────────────────────────
 // Join a voice channel — get transport params + router RTP capabilities.
-// roomId conventions:  dm_{userId1}_{userId2}  |  group_{groupId}
 router.post("/join", async (req, res) => {
   const user = (req as any).user as { id: number; username: string };
   const { roomId, avatarUrl } = req.body as {
@@ -74,8 +74,6 @@ router.post("/join", async (req, res) => {
     return;
   }
 
-  // peerId is stable per user — api-server generates it (userId-based so
-  // reconnects are idempotent from voice-server's perspective)
   const peerId = `user_${user.id}`;
 
   try {
@@ -87,10 +85,7 @@ router.post("/join", async (req, res) => {
       avatarUrl: avatarUrl || null,
     });
 
-    logger.info(
-      { roomId, userId: user.id, peerId },
-      "[voice] join — transports created"
-    );
+    logger.info({ roomId, userId: user.id, peerId }, "[voice] join — transports created");
     res.json({ peerId, ...data });
   } catch (err: any) {
     logger.error({ err }, "[voice] join error");
@@ -123,14 +118,15 @@ router.post("/connect-transport", async (req, res) => {
 });
 
 // ─── POST /api/voice/produce ──────────────────────────────────────────────────
-// Client starts producing audio. Returns producerId.
-// api-server also broadcasts 'voice:producer-new' to the room via socket.
+// Client starts producing a track (audio, camera, or screen share).
+// Returns producerId. Broadcasts voice:producer-new to the room with kind + streamType.
 router.post("/produce", async (req, res) => {
   const user = (req as any).user as { id: number; username: string };
-  const { roomId, kind, rtpParameters, avatarUrl } = req.body as {
+  const { roomId, kind, rtpParameters, appData, avatarUrl } = req.body as {
     roomId: string;
     kind: "audio" | "video";
     rtpParameters: any;
+    appData?: { streamType?: string };
     avatarUrl?: string | null;
   };
 
@@ -139,22 +135,30 @@ router.post("/produce", async (req, res) => {
     return;
   }
 
+  const streamType = appData?.streamType || (kind === "audio" ? "audio" : "camera");
+
   try {
     const data = await voiceProxy("/produce", {
       roomId,
       peerId: `user_${user.id}`,
       kind,
       rtpParameters,
+      appData: { streamType },
     });
 
-    logger.info({ roomId, userId: user.id, producerId: data.producerId }, "[voice] produced");
+    logger.info(
+      { roomId, userId: user.id, producerId: data.producerId, kind, streamType },
+      "[voice] produced"
+    );
 
-    // Notify all peers in the room via socket.io so they create consumers
+    // Notify all peers in the room so they create consumers
     const io = req.app.get("io");
     if (io) {
       io.to(`voice_${roomId}`).emit("voice:producer-new", {
         peerId: `user_${user.id}`,
         producerId: data.producerId,
+        kind,
+        streamType,
         userId: user.id,
         username: user.username,
         avatarUrl: avatarUrl || null,
@@ -168,17 +172,63 @@ router.post("/produce", async (req, res) => {
   }
 });
 
+// ─── POST /api/voice/stop-produce ────────────────────────────────────────────
+// Close a specific producer (turn off camera or end screen share) while keeping
+// the peer in the room. Broadcasts voice:producer-closed with the producerId.
+router.post("/stop-produce", async (req, res) => {
+  const user = (req as any).user as { id: number; username: string };
+  const { roomId, producerId } = req.body as {
+    roomId: string;
+    producerId: string;
+  };
+
+  if (!roomId || !producerId) {
+    res.status(400).json({ error: "Missing required fields" });
+    return;
+  }
+
+  try {
+    const data = await voiceProxy("/stop-produce", {
+      roomId,
+      peerId: `user_${user.id}`,
+      producerId,
+    });
+
+    logger.info(
+      { roomId, userId: user.id, producerId, streamType: data.streamType },
+      "[voice] stop-produce"
+    );
+
+    // Notify room members that this specific producer is gone
+    const io = req.app.get("io");
+    if (io) {
+      io.to(`voice_${roomId}`).emit("voice:producer-closed", {
+        peerId: `user_${user.id}`,
+        producerId,
+        streamType: data.streamType,
+        userId: user.id,
+        username: user.username,
+      });
+    }
+
+    res.json({ stopped: true });
+  } catch (err: any) {
+    logger.error({ err }, "[voice] stop-produce error");
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── POST /api/voice/consume ──────────────────────────────────────────────────
-// Client requests to consume another peer's producer.
+// Client requests to consume a specific producerId.
 router.post("/consume", async (req, res) => {
   const user = (req as any).user as { id: number };
-  const { roomId, producerPeerId, rtpCapabilities } = req.body as {
+  const { roomId, producerId, rtpCapabilities } = req.body as {
     roomId: string;
-    producerPeerId: string;
+    producerId: string;
     rtpCapabilities: any;
   };
 
-  if (!roomId || !producerPeerId || !rtpCapabilities) {
+  if (!roomId || !producerId || !rtpCapabilities) {
     res.status(400).json({ error: "Missing required fields" });
     return;
   }
@@ -187,7 +237,7 @@ router.post("/consume", async (req, res) => {
     const data = await voiceProxy("/consume", {
       roomId,
       consumerPeerId: `user_${user.id}`,
-      producerPeerId,
+      producerId,
       rtpCapabilities,
     });
     res.json(data);
@@ -215,15 +265,13 @@ router.post("/leave", async (req, res) => {
     // Notify room members via socket.io
     const io = req.app.get("io");
     if (io) {
-      io.to(`voice_${roomId}`).emit("voice:producer-closed", {
+      io.to(`voice_${roomId}`).emit("voice:peer-left", {
         peerId,
         userId: user.id,
         username: user.username,
       });
     }
 
-    // Remove from socket room
-    // (socket itself handles socket.leave in socket.ts, but REST is also called)
     res.json({ left: true });
   } catch (err: any) {
     logger.error({ err }, "[voice] leave error");
