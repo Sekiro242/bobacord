@@ -1,0 +1,15 @@
+packages:
+  "socket.io-client": "Real-time communication for messaging and WebRTC signaling"
+  "framer-motion": "Smooth animations and transitions for UI elements"
+  "date-fns": "Formatting message timestamps"
+  "lucide-react": "Beautiful consistent iconography"
+  "react-hook-form": "Form state management and validation"
+  "@hookform/resolvers": "Zod resolver for forms"
+  "zod": "Schema validation"
+  "clsx": "Utility for constructing className strings conditionally"
+  "tailwind-merge": "Utility function to efficiently merge Tailwind CSS classes"
+
+notes:
+  - Expects socket.io to connect at the same origin root '/'
+  - Authentication relies on localStorage 'discord_token' and 'discord_user'
+  - WebRTC uses standard STUN servers for NAT traversal

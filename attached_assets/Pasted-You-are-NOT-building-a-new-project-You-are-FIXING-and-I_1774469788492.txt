@@ -1,0 +1,153 @@
+You are NOT building a new project.
+You are FIXING and IMPROVING an existing working web app.
+
+IMPORTANT:
+
+* Do NOT rewrite the whole project
+* Do NOT change working features
+* Only fix and upgrade the specific issues below
+
+CURRENT PROJECT:
+A web-based Discord-like app using:
+
+* Node.js + Express
+* Socket.IO
+* WebRTC (audio)
+* Frontend (React or Vanilla JS)
+* SQLite database
+
+---
+
+TASK 1: FIX TEXT MESSAGING (CRITICAL BUG)
+
+Problem:
+
+* Messages are not being sent or not received in real-time
+
+Requirements:
+
+* Ensure Socket.IO connection is working correctly
+* Fix emit/listen events for sending messages
+* Messages must:
+
+  * Send instantly
+  * Be received by other users in real-time
+  * Be saved in database
+  * Reload correctly after refresh
+
+Checklist:
+
+* Verify socket connection on client
+* Verify correct event names (no mismatch)
+* Ensure server broadcasts to correct room/chat
+* Ensure message is inserted into DB before emitting
+* Add console logs for debugging flow
+
+---
+
+TASK 2: ADD CALL RINGING SYSTEM (LIKE DISCORD)
+
+Current issue:
+
+* Calls start instantly or unclear behavior
+
+New behavior:
+
+* When user A starts a call:
+  → User B (and others) receive incoming call notification (RINGING)
+
+Required features:
+
+* Incoming call popup UI:
+
+  * Show caller name
+  * Accept button
+  * Decline button
+
+* Logic:
+
+  1. Caller emits "call:invite"
+  2. Receiver gets "incoming_call"
+  3. Receiver can:
+
+     * Accept → join WebRTC connection
+     * Decline → notify caller
+
+* If declined:
+  → Caller gets "call declined"
+
+* If accepted:
+  → Start WebRTC signaling (offer/answer/ICE)
+
+---
+
+TASK 3: VERIFY & FIX VOICE CALLING
+
+Problem:
+
+* Voice call may not be working
+
+Requirements:
+
+* Ensure WebRTC actually transmits audio
+
+Checklist:
+
+* getUserMedia must request AUDIO only
+* Ensure:
+
+  * offer/answer exchange works
+  * ICE candidates are exchanged
+* Ensure peers connect in group (max 3 users)
+
+Add:
+
+* Console logs for:
+
+  * offer created
+  * answer received
+  * ICE candidates exchanged
+
+---
+
+TASK 4: DEBUGGING IMPROVEMENTS
+
+Add:
+
+* Clear console logs for:
+
+  * socket connection
+  * message send/receive
+  * call events (invite, accept, decline)
+* Handle errors:
+
+  * user not connected
+  * failed WebRTC connection
+
+---
+
+TASK 5: DO NOT OVERCOMPLICATE
+
+STRICT RULES:
+
+* Do NOT redesign UI
+* Do NOT add new features
+* Do NOT refactor everything
+* Only fix what is broken and add ringing system
+
+---
+
+OUTPUT REQUIRED:
+
+1. Show ONLY the updated parts of code (not full rewrite)
+2. Explain what was broken and how it was fixed
+3. Clearly list all Socket.IO events used:
+
+   * messaging events
+   * call events
+
+GOAL:
+
+* Messaging works 100%
+* Call system behaves like Discord (ring → accept/decline)
+* Voice actually works (not fake UI)

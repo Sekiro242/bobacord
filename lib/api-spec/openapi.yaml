@@ -1,0 +1,489 @@
+openapi: 3.1.0
+info:
+  title: Bobacord API
+  version: 1.0.0
+  description: API for the Bobacord real-time communication platform.
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication
+  - name: users
+    description: User operations
+  - name: friends
+    description: Friend system
+  - name: messages
+    description: Text messaging
+  - name: groups
+    description: Group chats
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "200":
+          description: User registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users/search:
+    get:
+      operationId: searchUsers
+      tags: [users]
+      summary: Search users by username
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+
+  /users/profile:
+    patch:
+      operationId: updateProfile
+      tags: [users]
+      summary: Update current user profile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                avatarUrl:
+                  type: string
+                  nullable: true
+      responses:
+        "200":
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /friends:
+    get:
+      operationId: getFriends
+      tags: [friends]
+      summary: Get friends list
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Friends list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+
+  /friends/requests:
+    get:
+      operationId: getFriendRequests
+      tags: [friends]
+      summary: Get pending friend requests
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Pending requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FriendRequest"
+
+  /friends/request:
+    post:
+      operationId: sendFriendRequest
+      tags: [friends]
+      summary: Send a friend request
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FriendRequestSend"
+      responses:
+        "200":
+          description: Request sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FriendRequest"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /friends/accept:
+    post:
+      operationId: acceptFriendRequest
+      tags: [friends]
+      summary: Accept a friend request
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FriendRequestAccept"
+      responses:
+        "200":
+          description: Request accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /messages/dm/{userId}:
+    get:
+      operationId: getDmMessages
+      tags: [messages]
+      summary: Get DM messages with a user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+
+  /groups:
+    get:
+      operationId: getGroups
+      tags: [groups]
+      summary: Get all groups the user is in
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Groups
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Group"
+    post:
+      operationId: createGroup
+      tags: [groups]
+      summary: Create a group chat
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateGroupRequest"
+      responses:
+        "200":
+          description: Group created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Group"
+
+  /groups/{groupId}/messages:
+    get:
+      operationId: getGroupMessages
+      tags: [groups]
+      summary: Get messages in a group
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+      required:
+        - success
+
+    RegisterRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+      required:
+        - username
+        - password
+
+    LoginRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+      required:
+        - username
+        - password
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+      required:
+        - token
+        - user
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+      required:
+        - id
+        - username
+
+    FriendRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+        senderId:
+          type: integer
+        receiverId:
+          type: integer
+        status:
+          type: string
+        sender:
+          $ref: "#/components/schemas/User"
+        receiver:
+          $ref: "#/components/schemas/User"
+      required:
+        - id
+        - senderId
+        - receiverId
+        - status
+
+    FriendRequestSend:
+      type: object
+      properties:
+        receiverId:
+          type: integer
+      required:
+        - receiverId
+
+    FriendRequestAccept:
+      type: object
+      properties:
+        requestId:
+          type: integer
+      required:
+        - requestId
+
+    Message:
+      type: object
+      properties:
+        id:
+          type: integer
+        content:
+          type: string
+        senderId:
+          type: integer
+        senderUsername:
+          type: string
+        senderAvatarUrl:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        dmUserId:
+          type: integer
+          nullable: true
+        groupId:
+          type: integer
+          nullable: true
+      required:
+        - id
+        - content
+        - senderId
+        - senderUsername
+        - createdAt
+
+    Group:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        createdById:
+          type: integer
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+      required:
+        - id
+        - name
+        - createdById
+
+    CreateGroupRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        memberIds:
+          type: array
+          items:
+            type: integer
+      required:
+        - name
+        - memberIds

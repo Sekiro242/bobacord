@@ -1,0 +1,90 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Discord Dark Theme Inspired */
+  --background: 225 6% 23%;
+  /* #36393f */
+  --foreground: 214 9% 87%;
+  /* #dcddde */
+
+  --card: 218 8% 27%;
+  /* #40444b */
+  --card-foreground: 214 9% 87%;
+
+  --popover: 220 7% 18%;
+  /* #2b2d31 */
+  --popover-foreground: 214 9% 87%;
+
+  --primary: 235 86% 65%;
+  /* #5865f2 Blurple */
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 217 7% 32%;
+  /* #4f545c */
+  --secondary-foreground: 214 9% 87%;
+
+  --muted: 217 7% 32%;
+  /* #4f545c */
+  --muted-foreground: 215 4% 57%;
+  /* #8e9297 */
+
+  --accent: 217 7% 32%;
+  /* #4f545c */
+  --accent-foreground: 214 9% 87%;
+
+  --destructive: 359 83% 66%;
+  /* #ed4245 */
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 220 7% 18%;
+  /* #2b2d31 */
+  --input: 220 7% 13%;
+  /* #1e1f22 */
+  --ring: 235 86% 65%;
+
+  --sidebar: 223 7% 20%;
+  /* #2f3136 */
+  --sidebar-foreground: 215 4% 57%;
+  /* #8e9297 */
+  --sidebar-border: 220 7% 13%;
+  /* #1e1f22 */
+  --sidebar-primary: 235 86% 65%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 218 8% 27%;
+  /* #40444b */
+  --sidebar-accent-foreground: 214 9% 87%;
+  --sidebar-ring: 235 86% 65%;
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+}
+
+/* Custom Scrollbar for a more premium feel */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--secondary) / 0.5);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--secondary) / 0.8);
+}
+
+body {
+  border-color: hsl(var(--border));
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

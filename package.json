@@ -1,0 +1,24 @@
+{
+  "name": "bobacord-workspace",
+  "version": "0.0.0",
+  "license": "MIT",
+  "scripts": {
+    "build": "pnpm run typecheck && pnpm -r --if-present run build",
+    "typecheck:libs": "tsc --build",
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+  },
+  "private": true,
+  "workspaces": [
+    "artifacts/*",
+    "lib/*",
+    "lib/integrations/*",
+    "scripts"
+  ],
+  "devDependencies": {
+    "@rollup/rollup-win32-x64-msvc": "^4.60.0",
+    "@tailwindcss/oxide-win32-x64-msvc": "^4.2.2",
+    "lightningcss-win32-x64-msvc": "^1.32.0",
+    "prettier": "^3.8.1",
+    "typescript": "~5.9.2"
+  }
+}
