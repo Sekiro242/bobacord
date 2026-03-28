@@ -291,4 +291,27 @@ router.get("/room/:roomId/peers", async (req, res) => {
   }
 });
 
+// ─── POST /api/voice/restart-ice ─────────────────────────────────────────────
+router.post("/restart-ice", async (req, res) => {
+  const user = (req as any).user as { id: number };
+  const { roomId, transportId } = req.body;
+
+  if (!roomId || !transportId) {
+    res.status(400).json({ error: "Missing required fields" });
+    return;
+  }
+
+  try {
+    const data = await voiceProxy("/restart-ice", {
+      roomId,
+      peerId: `user_${user.id}`,
+      transportId,
+    });
+    res.json(data);
+  } catch (err: any) {
+    logger.error({ err }, "[voice] restart-ice error");
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

@@ -172,6 +172,30 @@ class RoomManager {
     logger.info({ peerId, transportId }, "Transport connected");
   }
 
+  // Restart ICE for a transport (client needs new parameters)
+  async restartIce(
+    roomId: string,
+    peerId: string,
+    transportId: string
+  ): Promise<any> {
+    const room = this.rooms.get(roomId);
+    const peer = room?.peers.get(peerId);
+    if (!room || !peer) throw new Error(`Peer ${peerId} not found`);
+
+    const transport =
+      peer.sendTransport?.id === transportId
+        ? peer.sendTransport
+        : peer.recvTransport?.id === transportId
+        ? peer.recvTransport
+        : null;
+
+    if (!transport) throw new Error(`Transport ${transportId} not found`);
+
+    const iceParameters = await transport.restartIce();
+    logger.info({ peerId, transportId }, "ICE restarted");
+    return iceParameters;
+  }
+
   // Start producing — supports multiple producers per peer (audio, camera, screen)
   async produce(
     roomId: string,

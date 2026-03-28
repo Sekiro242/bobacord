@@ -23,6 +23,7 @@ import { Device } from 'mediasoup-client';
 import type { Transport, Producer, Consumer } from 'mediasoup-client/lib/types';
 import { useSocket } from './use-socket';
 import { useAuth } from './use-auth';
+import { processLocalMic, addRemoteStream, removeRemoteStream, cleanupAllRemoteStreams, setGlobalVolume, getAudioContext } from '../lib/audio-engine';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -166,6 +167,7 @@ export function VoiceSFUProvider({ children }: { children: React.ReactNode }) {
   /** All active consumers keyed by producerId */
   const consumersRef = useRef<Map<string, ConsumerEntry>>(new Map());
   const localStreamRef = useRef<MediaStream | null>(null);
+  const rawLocalStreamRef = useRef<MediaStream | null>(null); // Keep reference to raw mic to stop it properly
   const localVideoStreamRef = useRef<MediaStream | null>(null);
   const localScreenStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -176,6 +178,7 @@ export function VoiceSFUProvider({ children }: { children: React.ReactNode }) {
   const remoteStreamsRef = useRef<Map<string, RemoteStream>>(new Map());
   const isVideoOnRef = useRef(false);
   const isScreenSharingRef = useRef(false);
+  const adaptationIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -186,9 +189,16 @@ export function VoiceSFUProvider({ children }: { children: React.ReactNode }) {
   const cleanupCall = useCallback(() => {
     console.log('[VoiceSFU] Cleaning up call state');
 
+    if (adaptationIntervalRef.current) {
+      clearInterval(adaptationIntervalRef.current);
+      adaptationIntervalRef.current = null;
+    }
+
     // Stop local mic
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
+    rawLocalStreamRef.current?.getTracks().forEach((t) => t.stop());
     localStreamRef.current = null;
+    rawLocalStreamRef.current = null;
     setLocalStream(null);
 
     // Stop local camera
@@ -222,6 +232,7 @@ export function VoiceSFUProvider({ children }: { children: React.ReactNode }) {
     consumersRef.current.forEach((entry) => entry.consumer.close());
     consumersRef.current.clear();
     remoteStreamsRef.current.clear();
+    cleanupAllRemoteStreams();
     syncRemoteStreams();
 
     setActiveCallRoom(null);
@@ -234,6 +245,27 @@ export function VoiceSFUProvider({ children }: { children: React.ReactNode }) {
     isScreenSharingRef.current = false;
     setLocalSpeaking(false);
   }, [syncRemoteStreams]);
+
+  const restartIce = useCallback(
+    async (transport: Transport) => {
+      const roomId = activeRoomRef.current;
+      if (!roomId || !token) return;
+
+      try {
+        console.log(`[VoiceSFU] Restarting ICE for transport ${transport.id}...`);
+        const iceParameters = await voiceFetch('/restart-ice', token, {
+          roomId,
+          transportId: transport.id,
+        });
+
+        await transport.restartIce({ iceParameters });
+        console.log(`[VoiceSFU] ICE restarted for transport ${transport.id}`);
+      } catch (err) {
+        console.error(`[VoiceSFU] restartIce error for transport ${transport.id}:`, err);
+      }
+    },
+    [token]
+  );
 
   // ── Consume a remote producer (audio, camera, or screen) ─────────────────────
   const consumeProducer = useCallback(
@@ -297,6 +329,8 @@ export function VoiceSFUProvider({ children }: { children: React.ReactNode }) {
 
         if (streamType === 'audio') {
           remoteStreamsRef.current.set(peerId, { ...peerEntry, audioStream: stream });
+          // Route through our central normalizer
+          addRemoteStream(peerId, stream);
         } else if (streamType === 'camera') {
           remoteStreamsRef.current.set(peerId, { ...peerEntry, videoStream: stream, isVideoOn: true });
         } else if (streamType === 'screen') {
@@ -317,37 +351,36 @@ export function VoiceSFUProvider({ children }: { children: React.ReactNode }) {
     async (roomId: string) => {
       if (!token || !user) return;
 
+      // ── Ensure AudioContext is resumed upon user gesture (Join) ─────────────
+      getAudioContext();
+
       try {
         console.log('[VoiceSFU] Requesting microphone...');
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: 48000,
+            channelCount: 1,
+          }, 
+          video: false 
+        });
         console.log('[VoiceSFU] Microphone granted');
 
-        localStreamRef.current = stream;
-        setLocalStream(stream);
+        rawLocalStreamRef.current = stream;
 
-        // Speaking detection via AudioContext analyser
-        const audioCtx = new AudioContext();
-        const source = audioCtx.createMediaStreamSource(stream);
-        const analyzer = audioCtx.createAnalyser();
-        analyzer.fftSize = 256;
-        source.connect(analyzer);
-        audioContextRef.current = audioCtx;
-        analyzerRef.current = analyzer;
-
-        const bufData = new Uint8Array(analyzer.frequencyBinCount);
-        const checkSpeaking = () => {
-          if (!analyzerRef.current) return;
-          analyzerRef.current.getByteFrequencyData(bufData);
-          const avg = bufData.reduce((a, b) => a + b, 0) / bufData.length;
-          const speaking = avg > 12;
+        // Route mic through central AudioEngine for VAD + light compression + RNNoise hook
+        const processedStream = await processLocalMic(stream, (speaking) => {
           if (speaking !== speakingRef.current) {
             speakingRef.current = speaking;
             setLocalSpeaking(speaking);
             socket?.emit('speaking', { roomId, isSpeaking: speaking });
           }
-          requestAnimationFrame(checkSpeaking);
-        };
-        requestAnimationFrame(checkSpeaking);
+        });
+
+        localStreamRef.current = processedStream;
+        setLocalStream(processedStream);
 
         // ── Step 1: Join room on voice-server ───────────────────────────────────
         console.log('[VoiceSFU] Calling /api/voice/join...');
@@ -366,7 +399,14 @@ export function VoiceSFUProvider({ children }: { children: React.ReactNode }) {
         console.log('[VoiceSFU] Device loaded');
 
         // ── Step 3: Create send transport ──────────────────────────────────────
-        const sendTransport = device.createSendTransport(sendTransportOptions);
+        const sendTransport = device.createSendTransport({
+          ...sendTransportOptions,
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            // Add Coturn setup example here for strict firewalls:
+            // { urls: 'turn:YOUR_PUBLIC_IP:3478', username: 'username', credential: 'password' }
+          ],
+        });
         sendTransportRef.current = sendTransport;
 
         sendTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
@@ -379,6 +419,16 @@ export function VoiceSFUProvider({ children }: { children: React.ReactNode }) {
             callback();
           } catch (err: any) {
             errback(err);
+          }
+        });
+
+        sendTransport.on('connectionstatechange', (state) => {
+          console.log(`[VoiceSFU] Send transport state: ${state}`);
+          if (state === 'disconnected') {
+             console.warn('[VoiceSFU] Send transport disconnected. Temporary network drop? Wait for reconnect or trigger ICE restart.');
+          } else if (state === 'failed') {
+             console.error('[VoiceSFU] Send transport failed. Triggering ICE restart...');
+             restartIce(sendTransport);
           }
         });
 
@@ -400,7 +450,12 @@ export function VoiceSFUProvider({ children }: { children: React.ReactNode }) {
         });
 
         // ── Step 4: Create recv transport ───────────────────────────────────────
-        const recvTransport = device.createRecvTransport(recvTransportOptions);
+        const recvTransport = device.createRecvTransport({
+          ...recvTransportOptions,
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+          ],
+        });
         recvTransportRef.current = recvTransport;
 
         recvTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
@@ -416,10 +471,28 @@ export function VoiceSFUProvider({ children }: { children: React.ReactNode }) {
           }
         });
 
+        recvTransport.on('connectionstatechange', (state) => {
+          console.log(`[VoiceSFU] Recv transport state: ${state}`);
+          if (state === 'failed') {
+            console.error('[VoiceSFU] Recv transport failed. Triggering ICE restart...');
+            restartIce(recvTransport);
+          }
+        });
+
         // ── Step 5: Start producing mic audio ───────────────────────────────────
-        const audioTrack = stream.getAudioTracks()[0];
+        const audioTrack = processedStream.getAudioTracks()[0];
         const audioProducer = await sendTransport.produce({
           track: audioTrack,
+          // Single encoding with capped bitrate — Opus is CBR-like, one layer is enough
+          encodings: [{ maxBitrate: 64000 }],
+          // Explicit Opus quality settings
+          codecOptions: {
+            opusStereo: false,    // Mono: lower bitrate, lower latency
+            opusDtx: true,        // Discontinuous Transmission: no packets during silence
+            opusFec: true,        // Forward Error Correction: recovers from packet loss
+            opusMaxAverageBitrate: 64000, // Hard ceiling
+            opusPtime: 20,        // 20ms packet time (Discord default)
+          },
           appData: { streamType: 'audio' },
         });
         audioProducerRef.current = audioProducer;
@@ -444,6 +517,33 @@ export function VoiceSFUProvider({ children }: { children: React.ReactNode }) {
           roomId,
           avatarUrl: (user as any).avatarUrl || null,
         });
+
+        // Dynamic bitrate monitoring loop
+        adaptationIntervalRef.current = setInterval(async () => {
+          if (!sendTransportRef.current) return;
+          try {
+            const stats = await sendTransportRef.current.getStats();
+            stats.forEach((report: any) => {
+              if (report.type === 'outbound-rtp' && report.kind === 'audio') {
+                const fractionLost = report.fractionLost || 0;
+                // If high packet loss, log or adapt based on metrics
+                if (fractionLost > 0.08) {
+                   console.warn(`[Network] High audio packet loss: ${(fractionLost*100).toFixed(1)}%. Degrading bitrate to 32kbps...`);
+                   audioProducerRef.current?.setRtpEncodingParameters({ maxBitrate: 32000 }).catch((e: any) => {});
+                } else if (fractionLost < 0.02) {
+                   audioProducerRef.current?.setRtpEncodingParameters({ maxBitrate: 64000 }).catch((e: any) => {});
+                }
+              }
+            });
+
+            // ── Inbound (Consumer) Stats Monitoring ─────────────
+            remoteStreamsRef.current.forEach(async (peer, peerId) => {
+               // Find the consumer for this peer in our Mediasoup client if we have a map
+               // For now, we'll focus on the inbound-rtp metrics for current consumers
+               // (Advanced implementation: track consumer objects in a Map for direct stats query)
+            });
+          } catch (e) {}
+        }, 5000); // 5s interval for stability
 
         activeRoomRef.current = roomId;
         setActiveCallRoom(roomId);
@@ -540,6 +640,7 @@ export function VoiceSFUProvider({ children }: { children: React.ReactNode }) {
         } else {
           // Audio producer closed → peer is gone
           remoteStreamsRef.current.delete(data.peerId);
+          removeRemoteStream(data.peerId);
         }
         syncRemoteStreams();
       }
@@ -558,6 +659,7 @@ export function VoiceSFUProvider({ children }: { children: React.ReactNode }) {
       }
 
       remoteStreamsRef.current.delete(data.peerId);
+      removeRemoteStream(data.peerId);
       syncRemoteStreams();
     };
 
@@ -681,11 +783,17 @@ export function VoiceSFUProvider({ children }: { children: React.ReactNode }) {
   };
 
   const toggleMute = () => {
-    if (!localStreamRef.current) return;
+    if (!localStreamRef.current && !rawLocalStreamRef.current) return;
     const newState = !isMuted;
-    localStreamRef.current.getAudioTracks().forEach((t) => {
+    
+    // Mute both the raw source and the processed output
+    rawLocalStreamRef.current?.getAudioTracks().forEach((t) => {
       t.enabled = !newState;
     });
+    localStreamRef.current?.getAudioTracks().forEach((t) => {
+      t.enabled = !newState;
+    });
+
     setIsMuted(newState);
     socket?.emit('mute_status', { roomId: activeRoomRef.current, isMuted: newState });
   };
@@ -693,6 +801,7 @@ export function VoiceSFUProvider({ children }: { children: React.ReactNode }) {
   const toggleDeafen = () => {
     const newState = !isDeafened;
     setIsDeafened(newState);
+    setGlobalVolume(newState ? 0 : 1);
     if (newState && !isMuted) toggleMute();
     socket?.emit('deafen_status', { roomId: activeRoomRef.current, isDeafened: newState });
   };
@@ -711,7 +820,7 @@ export function VoiceSFUProvider({ children }: { children: React.ReactNode }) {
       videoProducerRef.current = null;
 
       // Stop camera tracks
-      localVideoStreamRef.current?.getTracks().forEach((t) => t.stop());
+      localVideoStreamRef.current?.getTracks().forEach((t: MediaStreamTrack) => t.stop());
       localVideoStreamRef.current = null;
       setLocalVideoStream(null);
 
@@ -733,9 +842,11 @@ export function VoiceSFUProvider({ children }: { children: React.ReactNode }) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            frameRate: { ideal: 30 },
+            // Discord-style: 640x360 comfortable resolution for standard calls
+            width:     { ideal: 640,  max: 1280 },
+            height:    { ideal: 360,  max: 720  },
+            frameRate: { ideal: 30,   max: 60   },
+            facingMode: 'user',
           },
           audio: false,
         });
@@ -744,8 +855,9 @@ export function VoiceSFUProvider({ children }: { children: React.ReactNode }) {
         setLocalVideoStream(stream);
 
         const videoTrack = stream.getVideoTracks()[0];
+        const settings = videoTrack.getSettings();
+        console.log('[VoiceSFU] Camera settings:', settings.width, 'x', settings.height, '@', settings.frameRate, 'fps');
 
-        // If sendTransport is not ready (joining failed partially), abort
         if (!sendTransportRef.current) {
           stream.getTracks().forEach((t) => t.stop());
           throw new Error('Send transport not ready');
@@ -753,12 +865,17 @@ export function VoiceSFUProvider({ children }: { children: React.ReactNode }) {
 
         const producer = await sendTransportRef.current.produce({
           track: videoTrack,
+          // Named simulcast layers for SFU spatial layer selection
           encodings: [
-            { maxBitrate: 100_000, scaleResolutionDownBy: 4 },
-            { maxBitrate: 300_000, scaleResolutionDownBy: 2 },
-            { maxBitrate: 900_000, scaleResolutionDownBy: 1 },
+            { rid: 'r0', maxBitrate:  120_000, scaleResolutionDownBy: 4, maxFramerate: 15 }, // 160x90  thumbnail
+            { rid: 'r1', maxBitrate:  400_000, scaleResolutionDownBy: 2, maxFramerate: 30 }, // 320x180 medium
+            { rid: 'r2', maxBitrate: 1_000_000, scaleResolutionDownBy: 1, maxFramerate: 30 }, // 640x360 full
           ],
-          codecOptions: { videoGoogleStartBitrate: 1000 },
+          codecOptions: {
+            videoGoogleStartBitrate: 300,
+            videoGoogleMaxBitrate:   1000,
+            videoGoogleMinBitrate:   80,
+          },
           appData: { streamType: 'camera' },
         });
 
@@ -836,14 +953,22 @@ export function VoiceSFUProvider({ children }: { children: React.ReactNode }) {
         const screenTrack = stream.getVideoTracks()[0];
 
         if (!sendTransportRef.current) {
-          stream.getTracks().forEach((t) => t.stop());
+          stream.getTracks().forEach((t: MediaStreamTrack) => t.stop());
           throw new Error('Send transport not ready');
         }
 
         const producer = await sendTransportRef.current.produce({
           track: screenTrack,
-          encodings: [{ maxBitrate: 1_500_000 }],
-          codecOptions: { videoGoogleStartBitrate: 1000 },
+          // Screen share gets a single HIGH quality encoding (no simulcast needed)
+          // Discord uses ~1.5Mbps for screen share at 1080p/30fps
+          encodings: [
+            { maxBitrate: 1_500_000, maxFramerate: 30 },
+          ],
+          codecOptions: {
+            videoGoogleStartBitrate: 1000,
+            videoGoogleMaxBitrate: 1500,
+            videoGoogleMinBitrate: 200,
+          },
           appData: { streamType: 'screen' },
         });
 

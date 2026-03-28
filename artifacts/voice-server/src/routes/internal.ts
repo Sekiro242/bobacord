@@ -232,4 +232,22 @@ router.get("/room/:roomId/peers", (req, res) => {
   res.json({ peers });
 });
 
+// ─── POST /internal/restart-ice ──────────────────────────────────────────────
+router.post("/restart-ice", async (req, res) => {
+  const { roomId, peerId, transportId } = req.body;
+
+  if (!roomId || !peerId || !transportId) {
+    res.status(400).json({ error: "Missing required fields" });
+    return;
+  }
+
+  try {
+    const iceParameters = await roomManager.restartIce(roomId, peerId, transportId);
+    res.json(iceParameters);
+  } catch (err: any) {
+    logger.error({ err }, "[internal] restart-ice error");
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

@@ -19,6 +19,11 @@ export const mediaCodecs: RtpCodecCapability[] = [
     mimeType: "audio/opus",
     clockRate: 48000,
     channels: 2,
+    parameters: {
+      useinbandfec: 1,
+      usedtx: 1,
+      maxaveragebitrate: 64000,
+    },
   },
 
   // ── Video: VP8 (widest browser support) ──

@@ -10,10 +10,12 @@ import {
   VideoOff,
   GripHorizontal,
   Monitor,
+  Maximize2,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useRef, useEffect } from "react";
-import { motion } from "framer-motion";
+import { useRef, useEffect, useState, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useLocation } from "wouter";
 
 // ─── Shared participant list ──────────────────────────────────────────────────
@@ -100,124 +102,204 @@ function VideoNode({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const fullscreenVideoRef = useRef<HTMLVideoElement>(null);
 
   // Active video stream: screen share takes priority over camera
   const activeVideoStream = participant.screenStream ?? participant.videoStream ?? null;
   const showVideo = !!activeVideoStream;
+  const isScreenShare = !!participant.screenStream;
 
-  // Attach video stream
+  // Attach video stream to inline player
   useEffect(() => {
     if (videoRef.current) {
       videoRef.current.srcObject = activeVideoStream;
     }
   }, [activeVideoStream]);
 
-  // Attach audio stream (hidden element for remote peers)
+  // Attach video stream to fullscreen player
+  useEffect(() => {
+    if (fullscreenVideoRef.current) {
+      fullscreenVideoRef.current.srcObject = activeVideoStream;
+    }
+  }, [activeVideoStream, isFullscreen]);
+
+  // Hidden muted audio element to keep stream alive (required by browsers)
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.srcObject = participant.audioStream;
+      audioRef.current.muted = true;
+      audioRef.current.volume = 0;
     }
   }, [participant.audioStream]);
 
-  // Control muting on the audio element
+  // Close fullscreen on Escape key
   useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.muted = participant.isLocal || iAmDeafened;
-    }
-  }, [participant.isLocal, iAmDeafened]);
+    if (!isFullscreen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsFullscreen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isFullscreen]);
 
   const speakingRing = participant.isSpeaking
     ? "ring-4 ring-emerald-500/80 shadow-[0_0_18px_rgba(16,185,129,0.4)]"
     : "";
 
   return (
-    <div
-      className={cn(
-        "relative flex flex-col items-center justify-center group h-full",
-        className
-      )}
-    >
-      {/* Hidden audio element for remote peers */}
-      <audio ref={audioRef} autoPlay playsInline style={{ display: "none" }} />
+    <>
+      {/* Fullscreen Modal */}
+      <AnimatePresence>
+        {isFullscreen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center"
+          >
+            {/* Header */}
+            <div className="absolute top-0 left-0 right-0 h-12 flex items-center justify-between px-4 bg-gradient-to-b from-black/80 to-transparent z-10">
+              <div className="flex items-center gap-2 text-white/80 text-sm font-medium">
+                <Monitor className="w-4 h-4" />
+                {participant.username}'s screen
+              </div>
+              <button
+                onClick={() => setIsFullscreen(false)}
+                className="p-2 rounded-lg hover:bg-white/10 transition-colors text-white/80 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-      {showVideo ? (
-        /* ── Video mode ─────────────────────────────────────────── */
-        <div
-          className={cn(
-            "relative overflow-hidden bg-black/90 w-full h-full rounded-xl border-2 transition-all duration-200",
-            participant.isSpeaking
-              ? "border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.35)]"
-              : "border-white/5"
-          )}
-        >
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted // always mute the video element; audio plays via <audio> above
-            className="w-full h-full object-cover"
-          />
-          {/* Screen share badge */}
-          {participant.isScreenSharing && (
-            <div className="absolute top-2 left-2 bg-indigo-600/90 backdrop-blur-sm px-2 py-0.5 rounded-md text-xs font-semibold text-white flex items-center gap-1 border border-white/10">
-              <Monitor className="w-3 h-3" />
-              Screen
-            </div>
-          )}
-          {!hideName && (
-            <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-md px-3 py-1 rounded-lg text-xs font-medium max-w-[90%] truncate text-white border border-white/10 shadow-lg">
-              {participant.username.split(" ")[0]}{" "}
-              {participant.isLocal && "(You)"}
-            </div>
-          )}
-        </div>
-      ) : (
-        /* ── Audio-only / avatar mode ────────────────────────────── */
-        <div className="relative flex flex-col items-center justify-center p-4">
-          {participant.avatarUrl ? (
-            <img
-              src={participant.avatarUrl}
-              alt={participant.username}
-              className={cn(
-                "rounded-full object-cover transition-all duration-300 shadow-2xl w-24 h-24",
-                speakingRing
-              )}
-              draggable={false}
+            {/* Full-screen Video */}
+            <video
+              ref={fullscreenVideoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-contain"
+              style={{ imageRendering: 'auto' }}
             />
-          ) : (
-            <div
-              className={cn(
-                "rounded-full bg-[#1e1f22] border-2 border-white/5 flex items-center justify-center font-bold text-primary shadow-2xl transition-all duration-300 w-24 h-24 text-4xl",
-                speakingRing
-              )}
-            >
-              {participant.username[0].toUpperCase()}
-            </div>
-          )}
 
-          {/* Status badges */}
-          <div className="absolute bottom-3 right-3 flex gap-1 z-10">
-            {participant.isMuted && (
-              <div className="bg-destructive p-1.5 rounded-full shadow-lg border-2 border-[#111214]">
-                <MicOff className="w-3.5 h-3.5 text-white" />
+            {/* Speaking indicator */}
+            {participant.isSpeaking && (
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-emerald-500/20 border border-emerald-500/60 text-emerald-400 text-xs font-medium px-3 py-1.5 rounded-full flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                {participant.username} is speaking
               </div>
             )}
-            {participant.isDeafened && (
-              <div className="bg-destructive p-1.5 rounded-full shadow-lg border-2 border-[#111214]">
-                <Headphones className="w-3.5 h-3.5 text-white" />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Inline Tile */}
+      <div
+        className={cn(
+          "relative flex flex-col items-center justify-center group h-full",
+          className
+        )}
+      >
+        <audio ref={audioRef} autoPlay playsInline muted style={{ display: "none" }} />
+
+        {showVideo ? (
+          /* ── Video mode ─────────────────────────────────────────── */
+          <div
+            className={cn(
+              "relative overflow-hidden bg-black/90 w-full h-full rounded-xl border-2 transition-all duration-200",
+              participant.isSpeaking
+                ? "border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.35)]"
+                : "border-white/5"
+            )}
+          >
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              // Smooth playback hints for the browser renderer
+              style={{ imageRendering: 'auto', backfaceVisibility: 'hidden' }}
+              className="w-full h-full object-cover"
+            />
+
+            {/* Screen share badge + fullscreen button */}
+            {isScreenShare && (
+              <div className="absolute top-2 left-2 right-2 flex items-center justify-between">
+                <div className="bg-indigo-600/90 backdrop-blur-sm px-2 py-0.5 rounded-md text-xs font-semibold text-white flex items-center gap-1 border border-white/10">
+                  <Monitor className="w-3 h-3" />
+                  Screen
+                </div>
+                <button
+                  onClick={() => setIsFullscreen(true)}
+                  className="bg-black/60 hover:bg-black/80 backdrop-blur-sm border border-white/10 text-white p-1.5 rounded-md transition-all opacity-0 group-hover:opacity-100"
+                  title="Fullscreen"
+                >
+                  <Maximize2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {/* Camera badge (no screen share) */}
+            {!isScreenShare && participant.isScreenSharing && (
+              <div className="absolute top-2 left-2 bg-indigo-600/90 backdrop-blur-sm px-2 py-0.5 rounded-md text-xs font-semibold text-white flex items-center gap-1 border border-white/10">
+                <Monitor className="w-3 h-3" />
+                Screen
+              </div>
+            )}
+
+            {!hideName && (
+              <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-md px-3 py-1 rounded-lg text-xs font-medium max-w-[90%] truncate text-white border border-white/10 shadow-lg">
+                {participant.username.split(" ")[0]}{" "}
+                {participant.isLocal && "(You)"}
               </div>
             )}
           </div>
+        ) : (
+          /* ── Audio-only / avatar mode ────────────────────────────────── */
+          <div className="relative flex flex-col items-center justify-center p-4">
+            {participant.avatarUrl ? (
+              <img
+                src={participant.avatarUrl}
+                alt={participant.username}
+                className={cn(
+                  "rounded-full object-cover transition-all duration-300 shadow-2xl w-24 h-24",
+                  speakingRing
+                )}
+                draggable={false}
+              />
+            ) : (
+              <div
+                className={cn(
+                  "rounded-full bg-[#1e1f22] border-2 border-white/5 flex items-center justify-center font-bold text-primary shadow-2xl transition-all duration-300 w-24 h-24 text-4xl",
+                  speakingRing
+                )}
+              >
+                {participant.username[0].toUpperCase()}
+              </div>
+            )}
 
-          {!hideName && (
-            <div className="mt-4 bg-black/40 px-3 py-1 rounded-full text-sm font-medium text-white/90 border border-white/5">
-              {participant.username.split(" ")[0]}{" "}
-              {participant.isLocal && "(You)"}
+            {/* Status badges */}
+            <div className="absolute bottom-3 right-3 flex gap-1 z-10">
+              {participant.isMuted && (
+                <div className="bg-destructive p-1.5 rounded-full shadow-lg border-2 border-[#111214]">
+                  <MicOff className="w-3.5 h-3.5 text-white" />
+                </div>
+              )}
+              {participant.isDeafened && (
+                <div className="bg-destructive p-1.5 rounded-full shadow-lg border-2 border-[#111214]">
+                  <Headphones className="w-3.5 h-3.5 text-white" />
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      )}
-    </div>
+
+            {!hideName && (
+              <div className="mt-4 bg-black/40 px-3 py-1 rounded-full text-sm font-medium text-white/90 border border-white/5">
+                {participant.username.split(" ")[0]}{" "}
+                {participant.isLocal && "(You)"}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 
