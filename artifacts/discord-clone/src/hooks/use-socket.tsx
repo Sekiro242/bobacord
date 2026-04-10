@@ -1,6 +1,7 @@
 import { useEffect, useState, createContext, useContext } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from './use-auth';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface SocketContextValue {
   socket: Socket | null;
@@ -17,6 +18,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   const { token, isAuthenticated } = useAuth();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (!isAuthenticated || !token) {
@@ -52,18 +55,48 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       console.error('[Socket] Connection error:', err.message);
     });
 
-    newSocket.on('message_error', (data: { error: string }) => {
-      console.error('[Socket] Message error from server:', data.error);
+    // ─── GLOBAL REAL-TIME LISTENERS ──────────────────────────────────────────
+    // Invalidate queries to refresh data in the background (no manual refresh needed)
+
+    newSocket.on('group_created', () => {
+      console.log('[Socket] Group created - refreshing list');
+      queryClient.invalidateQueries({ queryKey: ["/api/groups"] });
+    });
+
+    newSocket.on('friend_request_received', () => {
+      console.log('[Socket] Friend request received - refreshing');
+      queryClient.invalidateQueries({ queryKey: ["/api/friends/requests"] });
+    });
+
+    newSocket.on('friend_request_accepted', () => {
+      console.log('[Socket] Friend request accepted - refreshing');
+      queryClient.invalidateQueries({ queryKey: ["/api/friends"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/friends/requests"] });
+    });
+
+    newSocket.on('dm_message', () => {
+      // Invalidate friends to update unread counts and sorting in sidebar
+      queryClient.invalidateQueries({ queryKey: ["/api/friends"] });
+    });
+
+    newSocket.on('group_message', () => {
+      // Invalidate groups to update unread counts in sidebar
+      queryClient.invalidateQueries({ queryKey: ["/api/groups"] });
     });
 
     setSocket(newSocket);
 
     return () => {
       console.log('[Socket] Cleaning up socket connection');
+      newSocket.off('group_created');
+      newSocket.off('friend_request_received');
+      newSocket.off('friend_request_accepted');
+      newSocket.off('dm_message');
+      newSocket.off('group_message');
       newSocket.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, isAuthenticated]);
+  }, [token, isAuthenticated, queryClient]);
 
   return (
     <SocketContext.Provider value={{ socket, isConnected }}>

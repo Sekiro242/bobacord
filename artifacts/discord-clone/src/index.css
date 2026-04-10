@@ -1,71 +1,64 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  /* Discord Dark Theme Inspired */
-  --background: 225 6% 23%;
-  /* #36393f */
-  --foreground: 214 9% 87%;
-  /* #dcddde */
+@layer base {
+  :root {
+    /* BobaCord: Ink & Focus Theme */
+    --background: 240 10% 2%; /* Ultra Deep Ink */
+    --foreground: 0 0% 95%;
 
-  --card: 218 8% 27%;
-  /* #40444b */
-  --card-foreground: 214 9% 87%;
+    --card: 0 0% 5%;
+    --card-foreground: 0 0% 88%;
 
-  --popover: 220 7% 18%;
-  /* #2b2d31 */
-  --popover-foreground: 214 9% 87%;
+    --popover: 0 0% 6%;
+    --popover-foreground: 0 0% 88%;
 
-  --primary: 235 86% 65%;
-  /* #5865f2 Blurple */
-  --primary-foreground: 0 0% 100%;
+    --primary: 260 100% 65%; /* Boba Violet */
+    --primary-foreground: 0 0% 100%;
 
-  --secondary: 217 7% 32%;
-  /* #4f545c */
-  --secondary-foreground: 214 9% 87%;
+    --secondary: 0 0% 10%;
+    --secondary-foreground: 0 0% 90%;
 
-  --muted: 217 7% 32%;
-  /* #4f545c */
-  --muted-foreground: 215 4% 57%;
-  /* #8e9297 */
+    --muted: 0 0% 8%;
+    --muted-foreground: 0 0% 55%; /* ↑ was 40% — better contrast */
 
-  --accent: 217 7% 32%;
-  /* #4f545c */
-  --accent-foreground: 214 9% 87%;
+    --accent: 190 100% 50%; /* Prism Cyan */
+    --accent-foreground: 0 0% 100%;
 
-  --destructive: 359 83% 66%;
-  /* #ed4245 */
-  --destructive-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
 
-  --border: 220 7% 18%;
-  /* #2b2d31 */
-  --input: 220 7% 13%;
-  /* #1e1f22 */
-  --ring: 235 86% 65%;
+    --border: 0 0% 12%;
+    --input: 0 0% 6%;
+    --ring: 260 100% 65%;
 
-  --sidebar: 223 7% 20%;
-  /* #2f3136 */
-  --sidebar-foreground: 215 4% 57%;
-  /* #8e9297 */
-  --sidebar-border: 220 7% 13%;
-  /* #1e1f22 */
-  --sidebar-primary: 235 86% 65%;
-  --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 218 8% 27%;
-  /* #40444b */
-  --sidebar-accent-foreground: 214 9% 87%;
-  --sidebar-ring: 235 86% 65%;
-
-  --radius-sm: 0.25rem;
-  --radius-md: 0.375rem;
-  --radius-lg: 0.5rem;
+    /* System Radii */
+    --radius-sm: 0.5rem;
+    --radius-md: 0.75rem;
+    --radius-lg: 1rem;
+    --radius-xl: 1.5rem;
+    --radius-full: 9999px;
+  }
 }
 
-/* Custom Scrollbar for a more premium feel */
+@layer base {
+  * {
+    @apply border-white/5;
+  }
+  body {
+    @apply bg-[#020203] text-foreground antialiased selection:bg-primary/30;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    letter-spacing: -0.01em;
+  }
+}
+
+/* ── Scrollbar ── */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 4px;
+  height: 4px;
 }
 
 ::-webkit-scrollbar-track {
@@ -73,18 +66,104 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--secondary) / 0.5);
-  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--secondary) / 0.8);
+  background: rgba(255, 255, 255, 0.14);
 }
 
-body {
-  border-color: hsl(var(--border));
-  background-color: hsl(var(--background));
-  color: hsl(var(--foreground));
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/* ── Utility Classes ── */
+@layer utilities {
+  /* Glassmorphism */
+  .glass {
+    @apply bg-black/40 backdrop-blur-2xl border border-white/[0.04] shadow-2xl;
+  }
+  .glass-panel {
+    @apply bg-white/[0.02] backdrop-blur-3xl border border-white/[0.05] shadow-lg rounded-[24px];
+  }
+
+  /* Glows */
+  .boba-glow {
+    @apply shadow-[0_0_30px_rgba(139,92,246,0.2)];
+  }
+  .boba-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-tr from-primary via-white to-accent;
+  }
+
+  /* Section label — standardized */
+  .section-label {
+    @apply text-[10px] font-bold text-white/35 uppercase tracking-[0.18em];
+  }
+
+  /* Sidebar nav item */
+  .sidebar-item {
+    @apply flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-200 text-sm font-medium text-white/50 hover:text-white/80 hover:bg-white/[0.04] cursor-pointer;
+  }
+  .sidebar-item-active {
+    @apply bg-white/[0.06] text-white border border-white/[0.07];
+  }
+
+  /* Online status dot */
+  .status-dot-online {
+    @apply w-2.5 h-2.5 bg-emerald-500 border-2 border-[#040406] rounded-full shadow-[0_0_6px_rgba(16,185,129,0.5)];
+  }
+
+  /* Chat message text — readable defaults */
+  .msg-text {
+    @apply text-[14px] leading-relaxed whitespace-pre-wrap break-words font-normal text-white/80;
+  }
+  .msg-text-own {
+    @apply text-white/95;
+  }
+}
+
+/* ── Animations ── */
+
+/* Gentle float — loading screen */
+@keyframes boba-float {
+  0%   { transform: translateY(0px) scale(1); }
+  50%  { transform: translateY(-5px) scale(1.02); }
+  100% { transform: translateY(0px) scale(1); }
+}
+.animate-boba-float {
+  animation: boba-float 4s ease-in-out infinite;
+}
+
+/* Message entrance */
+@keyframes msg-in {
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.animate-msg-in {
+  animation: msg-in 0.2s ease-out both;
+}
+
+/* Fade + slide up — used in empty states / tab transitions */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up {
+  animation: fade-up 0.3s ease-out both;
+}
+
+/* One-shot notification badge ping — less distracting than infinite pulse */
+@keyframes badge-ping {
+  0%   { transform: scale(1); box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.5); }
+  60%  { transform: scale(1.15); box-shadow: 0 0 0 5px rgba(139, 92, 246, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(139, 92, 246, 0); }
+}
+.animate-badge-new {
+  animation: badge-ping 0.6s ease-out both;
+}
+
+/* Slide up — modals / toasts */
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-up {
+  animation: slide-up 0.25s ease-out both;
 }

@@ -28,9 +28,13 @@ router.post("/register", async (req, res) => {
       return;
     }
     const passwordHash = await bcrypt.hash(password, 10);
-    const [user] = await db.insert(usersTable).values({ username, passwordHash }).returning();
+    const [user] = await db.insert(usersTable).values({ 
+      username, 
+      passwordHash,
+      createdAt: new Date().toISOString()
+    }).returning();
     const token = signToken({ id: user.id, username: user.username });
-    res.json({ token, user: { id: user.id, username: user.username, avatarUrl: user.avatarUrl } });
+    res.json({ token, user: { id: user.id, username: user.username, avatarUrl: user.avatarUrl, bio: user.bio } });
   } catch (err) {
     req.log.error({ err }, "Register error");
 res.status(500).json({ error: err instanceof Error ? err.message : "Internal server error", stack: err instanceof Error ? err.stack : undefined });
@@ -55,7 +59,7 @@ router.post("/login", async (req, res) => {
       return;
     }
     const token = signToken({ id: user.id, username: user.username });
-    res.json({ token, user: { id: user.id, username: user.username, avatarUrl: user.avatarUrl } });
+    res.json({ token, user: { id: user.id, username: user.username, avatarUrl: user.avatarUrl, bio: user.bio } });
   } catch (err) {
     req.log.error({ err }, "Login error");
     res.status(500).json({ error: "Internal server error" });
@@ -65,7 +69,7 @@ router.post("/login", async (req, res) => {
 router.get("/me", requireAuth, async (req: AuthRequest, res) => {
   try {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id)).limit(1);
-    res.json({ id: user.id, username: user.username, avatarUrl: user.avatarUrl });
+    res.json({ id: user.id, username: user.username, avatarUrl: user.avatarUrl, bio: user.bio });
   } catch (err) {
     res.status(500).json({ error: "Internal server error" });
   }
