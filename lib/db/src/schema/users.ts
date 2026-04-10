@@ -7,7 +7,8 @@ export const usersTable = sqliteTable("users", {
   username: text("username").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   avatarUrl: text("avatar_url"),
-  createdAt: text("created_at").default(new Date().toISOString()).notNull(),
+  bio: text("bio"),
+  createdAt: text("created_at").notNull(),
 });
 
 export const insertUserSchema = createInsertSchema(usersTable).omit({ id: true, createdAt: true });

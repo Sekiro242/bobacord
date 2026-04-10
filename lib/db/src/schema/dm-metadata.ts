@@ -7,7 +7,7 @@ export const dmMetadataTable = sqliteTable(
     id: integer("id").primaryKey({ autoIncrement: true }),
     userId: integer("user_id").notNull().references(() => usersTable.id),
     otherUserId: integer("other_user_id").notNull().references(() => usersTable.id),
-    lastReadAt: text("last_read_at").default(new Date().toISOString()).notNull(),
+    lastReadAt: text("last_read_at").notNull(),
   },
   (table) => ({
     userPairIdx: uniqueIndex("user_pair_idx").on(table.userId, table.otherUserId),

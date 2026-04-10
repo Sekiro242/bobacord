@@ -80,6 +80,7 @@ export function setupSocket(httpServer: HttpServer) {
             content: data.content.trim(),
             dmUserId: data.toUserId,
             groupId: null,
+            createdAt: new Date().toISOString(),
           })
           .returning();
 
@@ -139,6 +140,7 @@ export function setupSocket(httpServer: HttpServer) {
             content: data.content.trim(),
             dmUserId: null,
             groupId: data.groupId,
+            createdAt: new Date().toISOString(),
           })
           .returning();
 

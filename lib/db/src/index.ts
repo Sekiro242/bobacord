@@ -11,9 +11,20 @@ sqlite.exec(`
     username TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     avatar_url TEXT,
+    bio TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now'))
   );
+`);
 
+try {
+  sqlite.exec(`ALTER TABLE users ADD COLUMN bio TEXT;`);
+} catch (e: any) {
+  if (!e.message.includes("duplicate column name")) {
+    throw e;
+  }
+}
+
+sqlite.exec(`
   CREATE TABLE IF NOT EXISTS friend_requests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sender_id INTEGER NOT NULL REFERENCES users(id),

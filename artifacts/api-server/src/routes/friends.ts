@@ -144,7 +144,7 @@ router.post("/request", requireAuth, async (req: AuthRequest, res) => {
 
     const [request] = await db
       .insert(friendRequestsTable)
-      .values({ senderId, receiverId, status: "pending" })
+      .values({ senderId, receiverId, status: "pending", createdAt: new Date().toISOString() })
       .returning();
 
     const [sender] = await db

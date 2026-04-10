@@ -10,6 +10,8 @@ import { SocketProvider } from "@/hooks/use-socket";
 import { VoiceSFUProvider, useVoiceSFU } from "@/hooks/use-voice-sfu";
 import { IncomingCallModal } from "@/components/IncomingCallModal";
 import { FloatingCallWidget } from "@/components/ActiveCallOverlay";
+import { SettingsModal } from "@/components/modals/SettingsModal";
+import { useSettings } from "@/hooks/use-settings";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -45,8 +47,14 @@ function AppWithCallModal() {
       <Toaster />
       {incomingCall && <IncomingCallModal />}
       <FloatingCallWidget />
+      <GlobalSettings />
     </>
   );
+}
+
+function GlobalSettings() {
+  const { isOpen, closeSettings } = useSettings();
+  return <SettingsModal isOpen={isOpen} onClose={closeSettings} />;
 }
 
 import { UnreadProvider } from "@/hooks/use-unread";

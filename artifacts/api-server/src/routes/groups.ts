@@ -83,11 +83,15 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
   try {
     const [group] = await db
       .insert(groupsTable)
-      .values({ name, createdById: userId })
+      .values({ name, createdById: userId, createdAt: new Date().toISOString() })
       .returning();
 
     await db.insert(groupMembersTable).values(
-      allMembers.map((uid) => ({ groupId: group.id, userId: uid }))
+      allMembers.map((uid) => ({ 
+        groupId: group.id, 
+        userId: uid, 
+        lastReadAt: new Date().toISOString() 
+      }))
     );
 
     const memberRows = await db

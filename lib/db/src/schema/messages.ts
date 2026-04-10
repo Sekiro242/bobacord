@@ -7,7 +7,7 @@ export const messagesTable = sqliteTable("messages", {
   content: text("content").notNull(),
   dmUserId: integer("dm_user_id").references(() => usersTable.id), // null for group messages
   groupId: integer("group_id"), // null for DMs
-  createdAt: text("created_at").default(new Date().toISOString()).notNull(),
+  createdAt: text("created_at").notNull(),
 });
 
 export type Message = typeof messagesTable.$inferSelect;

@@ -7,17 +7,21 @@ import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { SettingsModal } from "../modals/SettingsModal";
+import { useSettings } from "@/hooks/use-settings";
 import { useUnread } from "@/hooks/use-unread";
 import { useEffect } from "react";
+import { ProfilePopup } from "../chat/ProfilePopup";
 
 export function Sidebar() {
   const [location] = useLocation();
   const { user, logout } = useAuth();
   const queryClient = useQueryClient();
+  const { openSettings } = useSettings();
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  // Removed local isSettingsOpen state
   const [newGroupName, setNewGroupName] = useState("");
   const [selectedFriendIds, setSelectedFriendIds] = useState<number[]>([]);
+  const [selectedProfileId, setSelectedProfileId] = useState<number | null>(null);
 
   const { data: friends } = useGetFriends({ request: { headers: getAuthHeaders() as HeadersInit } });
   const { data: groups } = useGetGroups({ request: { headers: getAuthHeaders() as HeadersInit } });
@@ -68,8 +72,7 @@ export function Sidebar() {
           <img src="/logo.png" alt="BobaCord" className="w-full h-full object-cover" />
         </div>
         <h1 className="font-extrabold text-[17px] tracking-tight text-white flex items-baseline">
-          <span className="bg-clip-text text-transparent bg-gradient-to-r from-white via-white/90 to-white/60">Boba</span>
-          <span className="text-primary ml-0.5">Cord</span>
+          <span className="bg-clip-text text-transparent bg-gradient-to-r from-white via-white/90 to-white/60">Bobacord</span>
         </h1>
       </div>
 
@@ -236,7 +239,10 @@ export function Sidebar() {
       {/* ── Profile Rail ── */}
       <div className="border-t border-white/[0.05] bg-black/20 p-3">
         <div className="flex items-center justify-between px-2 py-1.5 rounded-xl hover:bg-white/[0.04] transition-all group">
-          <div className="flex items-center gap-2.5 min-w-0">
+          <div 
+            onClick={() => setSelectedProfileId(user?.id || null)}
+            className="flex items-center gap-2.5 min-w-0 cursor-pointer"
+          >
             <div className="relative shrink-0">
               {(user as any)?.avatarUrl ? (
                 <img
@@ -258,7 +264,7 @@ export function Sidebar() {
           </div>
           <div className="flex items-center gap-0.5">
             <button
-              onClick={() => setIsSettingsOpen(true)}
+              onClick={openSettings}
               title="Settings"
               className="p-1.5 rounded-lg text-white/30 hover:text-white hover:bg-white/[0.06] transition-all"
             >
@@ -275,9 +281,11 @@ export function Sidebar() {
         </div>
       </div>
 
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
+      <ProfilePopup
+        userId={selectedProfileId || 0}
+        isOpen={selectedProfileId !== null}
+        onClose={() => setSelectedProfileId(null)}
+        onEdit={openSettings}
       />
     </div>
   );

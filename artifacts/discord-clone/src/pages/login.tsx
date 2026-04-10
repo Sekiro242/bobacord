@@ -39,9 +39,9 @@ export default function Login() {
         >
           <div className="flex items-center gap-3.5">
             <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-[#9167e4] to-[#f472b6] flex items-center justify-center border border-white/20 shadow-[0_0_35px_rgba(145,103,228,0.35)] overflow-hidden p-0.5">
-              <img src="/logo.png" alt="BobaCord" className="w-full h-full object-cover rounded-full" />
+              <img src="/logo.png" alt="Bobacord" className="w-full h-full object-cover rounded-full" />
             </div>
-            <span className="text-3xl font-extrabold tracking-tight text-white">BobaCord</span>
+            <span className="text-3xl font-extrabold tracking-tight text-white">Bobacord</span>
           </div>
 
           <div className="space-y-3">
@@ -89,7 +89,7 @@ export default function Login() {
               {/* Header */}
               <div className="mb-8 text-center">
                 <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-4">
-                  <img src="/logo.png" alt="BobaCord" className="w-8 h-8 object-contain rounded-xl" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                  <img src="/logo.png" alt="Bobacord" className="w-8 h-8 object-contain rounded-xl" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                 </div>
                 <h1 className="text-2xl font-bold text-white tracking-tight mb-1">Welcome back</h1>
                 <p className="text-white/45 text-[13px]">Sign in to your account</p>

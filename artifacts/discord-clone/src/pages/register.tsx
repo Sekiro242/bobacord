@@ -51,10 +51,10 @@ export default function Register() {
               {/* Header */}
               <div className="mb-8 text-center">
                 <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-4">
-                  <img src="/logo.png" alt="BobaCord" className="w-8 h-8 object-contain rounded-xl" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                  <img src="/logo.png" alt="Bobacord" className="w-8 h-8 object-contain rounded-xl" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                 </div>
                 <h1 className="text-2xl font-bold text-white tracking-tight mb-1">Create an account</h1>
-                <p className="text-white/45 text-[13px]">Join BobaCord today — it's free</p>
+                <p className="text-white/45 text-[13px]">Join Bobacord today — it's free</p>
               </div>
 
               {/* Error */}

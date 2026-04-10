@@ -11,6 +11,8 @@ import { InRoomCallUI } from "@/components/ActiveCallOverlay";
 import { useUnread } from "@/hooks/use-unread";
 import { useNotifications } from "@/hooks/use-notifications";
 import { motion, AnimatePresence } from "framer-motion";
+import { ProfilePopup } from "./ProfilePopup";
+import { useSettings } from "@/hooks/use-settings";
 
 interface ChatAreaProps {
   type: "dm" | "group";
@@ -50,6 +52,8 @@ export function ChatArea({ type, id, name, targetUserIds = [] }: ChatAreaProps) 
   const [soundOn, setSoundOn] = useState(isSoundEnabled());
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [selectedProfileId, setSelectedProfileId] = useState<number | null>(null);
+  const { openSettings } = useSettings();
 
   // Mark as read on entry and when ID changes
   useEffect(() => {
@@ -306,10 +310,13 @@ export function ChatArea({ type, id, name, targetUserIds = [] }: ChatAreaProps) 
                       {/* Header: username + timestamp */}
                       {!isContinuation && (
                         <div className="flex items-baseline gap-2 mb-0.5">
-                          <span className={cn(
-                            "font-semibold text-[13px] leading-tight hover:underline cursor-pointer",
-                            isMe ? "text-primary" : "text-white/85"
-                          )}>
+                          <span 
+                            onClick={() => setSelectedProfileId(msg.senderId)}
+                            className={cn(
+                              "font-semibold text-[13px] leading-tight hover:underline cursor-pointer",
+                              isMe ? "text-primary" : "text-white/85"
+                            )}
+                          >
                             {msg.senderUsername}
                           </span>
                           {/* Discord-style timestamp: "Today at 2:32 PM" */}
@@ -366,6 +373,13 @@ export function ChatArea({ type, id, name, targetUserIds = [] }: ChatAreaProps) 
           </form>
         </div>
       </div>
+
+      <ProfilePopup 
+        userId={selectedProfileId || 0}
+        isOpen={selectedProfileId !== null}
+        onClose={() => setSelectedProfileId(null)}
+        onEdit={openSettings}
+      />
     </div>
   );
 }

@@ -31,11 +31,11 @@ export default function Home() {
         <div className="flex flex-col items-center gap-8 relative z-10 animate-boba-float">
           <div className="relative">
             <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-[#9167e4] to-[#f472b6] flex items-center justify-center border border-white/20 shadow-[0_0_50px_rgba(145,103,228,0.4)] overflow-hidden p-1">
-               <img src="/logo.png" alt="BobaCord" className="w-full h-full object-cover rounded-full" />
+               <img src="/logo.png" alt="Bobacord" className="w-full h-full object-cover rounded-full" />
             </div>
           </div>
           <div className="flex flex-col items-center gap-2">
-            <h2 className="text-2xl font-black tracking-tighter text-white">BobaCord</h2>
+            <h2 className="text-2xl font-black tracking-tighter text-white">Bobacord</h2>
             <div className="flex gap-1">
               {[0, 1, 2].map(i => (
                 <div key={i} className="w-1 h-1 rounded-full bg-primary/40 animate-pulse" style={{ animationDelay: `${i * 0.2}s` }} />

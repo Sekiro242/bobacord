@@ -5,14 +5,14 @@ export const groupsTable = sqliteTable("groups", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   createdById: integer("created_by_id").notNull().references(() => usersTable.id),
-  createdAt: text("created_at").default(new Date().toISOString()).notNull(),
+  createdAt: text("created_at").notNull(),
 });
 
 export const groupMembersTable = sqliteTable("group_members", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   groupId: integer("group_id").notNull().references(() => groupsTable.id),
   userId: integer("user_id").notNull().references(() => usersTable.id),
-  lastReadAt: text("last_read_at").default(new Date().toISOString()).notNull(),
+  lastReadAt: text("last_read_at").notNull(),
 });
 
 export type Group = typeof groupsTable.$inferSelect;

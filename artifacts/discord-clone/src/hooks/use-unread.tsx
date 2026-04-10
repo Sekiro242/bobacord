@@ -37,9 +37,9 @@ export function UnreadProvider({ children }: { children: React.ReactNode }) {
   // Update document title with unread badge
   useEffect(() => {
     if (totalUnread > 0) {
-      document.title = `(${totalUnread > 99 ? "99+" : totalUnread}) BobaCord`;
+      document.title = `(${totalUnread > 99 ? "99+" : totalUnread}) Bobacord`;
     } else {
-      document.title = "BobaCord";
+      document.title = "Bobacord";
     }
   }, [totalUnread]);
 

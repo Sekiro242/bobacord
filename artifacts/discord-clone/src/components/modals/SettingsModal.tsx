@@ -23,6 +23,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
   const [username, setUsername] = useState(user?.username || "");
+  const [bio, setBio] = useState((user as any)?.bio || "");
   const [avatarUrl, setAvatarUrl] = useState((user as any)?.avatarUrl || "");
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -71,6 +72,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           body: JSON.stringify({
             username,
             avatarUrl: avatarFile ? finalAvatarUrl : avatarUrl,
+            bio,
           }),
         });
         if (!resp.ok) throw new Error("Failed to update profile");
@@ -112,7 +114,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               <div className="absolute inset-0 bg-gradient-to-r from-primary/8 to-transparent pointer-events-none" />
               <div className="relative z-10">
                 <h2 className="text-xl font-semibold text-white tracking-tight">Settings</h2>
-                <p className="text-xs text-white/45 font-normal mt-0.5">Customize your BobaCord experience</p>
+                <p className="text-xs text-white/45 font-normal mt-0.5">Customize your Bobacord experience</p>
               </div>
               <button
                 onClick={onClose}
@@ -221,6 +223,20 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                           onChange={(e) => setUsername(e.target.value)}
                           className="w-full bg-background/50 border border-white/10 rounded-2xl px-4 py-3 focus:outline-none focus:border-primary/50 focus:shadow-[0_0_15px_rgba(139,92,246,0.1)] transition-all text-white text-sm"
                           required
+                        />
+                      </div>
+
+                      {/* Bio */}
+                      <div className="space-y-2">
+                        <label className="text-[11px] font-semibold text-white/55 uppercase tracking-[0.1em]">
+                          About Me
+                        </label>
+                        <textarea
+                          value={bio}
+                          onChange={(e) => setBio(e.target.value)}
+                          placeholder="Tell us about yourself..."
+                          rows={3}
+                          className="w-full bg-background/50 border border-white/10 rounded-2xl px-4 py-3 focus:outline-none focus:border-primary/50 focus:shadow-[0_0_15px_rgba(139,92,246,0.1)] transition-all text-white text-sm resize-none"
                         />
                       </div>
 

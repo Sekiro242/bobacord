@@ -9,7 +9,7 @@ export default function NotFound() {
 
       <div className="relative z-10 flex flex-col items-center text-center space-y-8 animate-boba-float">
         <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-[#9167e4] to-[#f472b6] flex items-center justify-center border border-white/20 shadow-[0_0_50px_rgba(145,103,228,0.4)] overflow-hidden p-1">
-           <img src="/logo.png" alt="BobaCord" className="w-full h-full object-cover rounded-full" />
+           <img src="/logo.png" alt="Bobacord" className="w-full h-full object-cover rounded-full" />
         </div>
 
         <div className="space-y-3">
@@ -17,7 +17,7 @@ export default function NotFound() {
             <AlertCircle className="h-6 w-6 text-primary" />
             <h1 className="text-4xl font-black text-white tracking-tighter uppercase">Frequency Lost</h1>
           </div>
-          <p className="text-white/20 text-xs font-bold uppercase tracking-[0.3em]">Code 404: The destination is outside the BobaCord network</p>
+          <p className="text-white/20 text-xs font-bold uppercase tracking-[0.3em]">Code 404: The destination is outside the Bobacord network</p>
         </div>
 
         <Link href="/">
