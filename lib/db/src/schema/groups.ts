@@ -12,6 +12,7 @@ export const groupMembersTable = sqliteTable("group_members", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   groupId: integer("group_id").notNull().references(() => groupsTable.id),
   userId: integer("user_id").notNull().references(() => usersTable.id),
+  lastReadAt: text("last_read_at").default(new Date().toISOString()).notNull(),
 });
 
 export type Group = typeof groupsTable.$inferSelect;

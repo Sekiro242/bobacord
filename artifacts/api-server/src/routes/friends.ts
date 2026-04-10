@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { friendRequestsTable, usersTable } from "@workspace/db/schema";
-import { eq, or, and } from "drizzle-orm";
+import { friendRequestsTable, usersTable, messagesTable, dmMetadataTable } from "@workspace/db/schema";
+import { eq, or, and, gt, count } from "drizzle-orm";
 import { requireAuth, AuthRequest } from "../lib/auth.js";
 
 const router = Router();
@@ -38,7 +38,31 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
           .from(usersTable)
           .where(eq(usersTable.id, fid))
           .limit(1);
-        return user;
+
+        if (!user) return null;
+
+        // Fetch last read at
+        const [meta] = await db
+          .select({ lastReadAt: dmMetadataTable.lastReadAt })
+          .from(dmMetadataTable)
+          .where(and(eq(dmMetadataTable.userId, userId), eq(dmMetadataTable.otherUserId, fid)))
+          .limit(1);
+
+        const lastRead = meta?.lastReadAt || "1970-01-01T00:00:00.000Z";
+
+        // Count unread messages
+        const [unread] = await db
+          .select({ count: count() })
+          .from(messagesTable)
+          .where(
+            and(
+              eq(messagesTable.senderId, fid),
+              eq(messagesTable.dmUserId, userId),
+              gt(messagesTable.createdAt, lastRead)
+            )
+          );
+
+        return { ...user, unreadCount: unread?.count || 0 };
       })
     );
 
@@ -57,7 +81,10 @@ router.get("/requests", requireAuth, async (req: AuthRequest, res) => {
       .from(friendRequestsTable)
       .where(
         and(
-          eq(friendRequestsTable.receiverId, userId),
+          or(
+            eq(friendRequestsTable.receiverId, userId),
+            eq(friendRequestsTable.senderId, userId)
+          ),
           eq(friendRequestsTable.status, "pending")
         )
       );
@@ -134,6 +161,7 @@ router.post("/request", requireAuth, async (req: AuthRequest, res) => {
     const io = req.app.get("io");
     if (io) {
       io.to(`user_${receiverId}`).emit("friend_request_received", { ...request, sender, receiver });
+      io.to(`user_${senderId}`).emit("friend_request_sent", { ...request, sender, receiver });
     }
 
     res.json({ ...request, sender, receiver });

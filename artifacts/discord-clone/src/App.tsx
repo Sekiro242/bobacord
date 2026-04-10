@@ -49,15 +49,19 @@ function AppWithCallModal() {
   );
 }
 
+import { UnreadProvider } from "@/hooks/use-unread";
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <SocketProvider>
-        <VoiceSFUProvider>
-          <TooltipProvider>
-            <AppWithCallModal />
-          </TooltipProvider>
-        </VoiceSFUProvider>
+        <UnreadProvider>
+          <VoiceSFUProvider>
+            <TooltipProvider>
+              <AppWithCallModal />
+            </TooltipProvider>
+          </VoiceSFUProvider>
+        </UnreadProvider>
       </SocketProvider>
     </QueryClientProvider>
   );

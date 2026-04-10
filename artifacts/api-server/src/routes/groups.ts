@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { groupsTable, groupMembersTable, messagesTable, usersTable } from "@workspace/db/schema";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, and, gt, count } from "drizzle-orm";
 import { requireAuth, AuthRequest } from "../lib/auth.js";
 
 const router = Router();
@@ -27,6 +27,26 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
           .where(eq(groupsTable.id, groupId))
           .limit(1);
 
+        if (!group) return null;
+
+        const [memberInfo] = await db
+          .select({ lastReadAt: groupMembersTable.lastReadAt })
+          .from(groupMembersTable)
+          .where(and(eq(groupMembersTable.groupId, groupId), eq(groupMembersTable.userId, userId)))
+          .limit(1);
+
+        const lastRead = memberInfo?.lastReadAt || "1970-01-01T00:00:00.000Z";
+
+        const [unread] = await db
+          .select({ count: count() })
+          .from(messagesTable)
+          .where(
+            and(
+              eq(messagesTable.groupId, groupId),
+              gt(messagesTable.createdAt, lastRead)
+            )
+          );
+
         const memberRows = await db
           .select({
             id: usersTable.id,
@@ -37,7 +57,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
           .innerJoin(usersTable, eq(groupMembersTable.userId, usersTable.id))
           .where(eq(groupMembersTable.groupId, groupId));
 
-        return { ...group, members: memberRows };
+        return { ...group, members: memberRows, unreadCount: unread?.count || 0 };
       })
     );
 
@@ -80,6 +100,13 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
       .innerJoin(usersTable, eq(groupMembersTable.userId, usersTable.id))
       .where(eq(groupMembersTable.groupId, group.id));
 
+    const io = req.app.get("io");
+    if (io) {
+      for (const member of memberRows) {
+        io.to(`user_${member.id}`).emit("group_created", { ...group, members: memberRows });
+      }
+    }
+
     res.json({ ...group, members: memberRows });
   } catch (err) {
     req.log.error({ err }, "Create group error");
@@ -89,7 +116,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
 
 router.get("/:groupId/messages", requireAuth, async (req: AuthRequest, res) => {
   const userId = req.user!.id;
-  const groupId = parseInt(req.params.groupId);
+  const groupId = parseInt(req.params.groupId as string);
   if (isNaN(groupId)) {
     res.status(400).json({ error: "Invalid groupId" });
     return;

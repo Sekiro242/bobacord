@@ -13,8 +13,8 @@ export default function Home() {
   const [matchDm, paramsDm] = useRoute("/dm/:id");
   const [matchGroup, paramsGroup] = useRoute("/group/:id");
 
-  const { data: friends } = useGetFriends({ request: { headers: getAuthHeaders() }, query: { enabled: isAuthenticated } });
-  const { data: groups } = useGetGroups({ request: { headers: getAuthHeaders() }, query: { enabled: isAuthenticated } });
+  const { data: friends } = useGetFriends({ query: { queryKey: ["/api/friends"], enabled: isAuthenticated }, request: { headers: getAuthHeaders() as HeadersInit } });
+  const { data: groups } = useGetGroups({ query: { queryKey: ["/api/groups"], enabled: isAuthenticated }, request: { headers: getAuthHeaders() as HeadersInit } });
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -24,12 +24,24 @@ export default function Home() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-pulse flex flex-col items-center gap-4">
-          <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center">
-            <div className="w-8 h-8 bg-primary rounded-full animate-bounce"></div>
+      <div className="min-h-screen bg-[#020203] flex items-center justify-center relative overflow-hidden">
+        {/* Prism background glow */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/10 rounded-full blur-[120px] opacity-40 animate-pulse"></div>
+        
+        <div className="flex flex-col items-center gap-8 relative z-10 animate-boba-float">
+          <div className="relative">
+            <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-[#9167e4] to-[#f472b6] flex items-center justify-center border border-white/20 shadow-[0_0_50px_rgba(145,103,228,0.4)] overflow-hidden p-1">
+               <img src="/logo.png" alt="BobaCord" className="w-full h-full object-cover rounded-full" />
+            </div>
           </div>
-          <p className="text-muted-foreground font-medium">Connecting...</p>
+          <div className="flex flex-col items-center gap-2">
+            <h2 className="text-2xl font-black tracking-tighter text-white">BobaCord</h2>
+            <div className="flex gap-1">
+              {[0, 1, 2].map(i => (
+                <div key={i} className="w-1 h-1 rounded-full bg-primary/40 animate-pulse" style={{ animationDelay: `${i * 0.2}s` }} />
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -67,9 +79,11 @@ export default function Home() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-screen w-full overflow-hidden bg-[#020203] text-foreground selection:bg-primary/30 outline-none">
       <Sidebar />
-      {content}
+      <div className="flex-1 relative overflow-hidden z-0 flex flex-col bg-[#040406]">
+        {content}
+      </div>
     </div>
   );
 }
