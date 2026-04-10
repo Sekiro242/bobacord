@@ -124,12 +124,16 @@ function VideoNode({
     }
   }, [activeVideoStream, isFullscreen]);
 
-  // Hidden muted audio element to keep stream alive (required by browsers)
+  // Hidden audio element to keep stream alive (required by browsers)
+  // In Chrome, if muted=true is used, the WebRTC track might be fully paused,
+  // preventing the Web Audio API (AudioEngine) from receiving any data.
+  // Instead, we set muted=false, volume=0, and force play()
   useEffect(() => {
-    if (audioRef.current) {
+    if (audioRef.current && participant.audioStream) {
       audioRef.current.srcObject = participant.audioStream;
-      audioRef.current.muted = true;
+      audioRef.current.muted = false; // Important for Chrome
       audioRef.current.volume = 0;
+      audioRef.current.play().catch(e => console.warn("Audio play blocked", e));
     }
   }, [participant.audioStream]);
 
@@ -322,7 +326,7 @@ export function InRoomCallUI() {
 
   return (
     <div
-      className="w-full bg-[#111214] flex flex-col justify-between overflow-hidden relative shrink-0"
+      className="w-full bg-background/80 backdrop-blur-2xl border-b border-white/5 flex flex-col justify-between overflow-hidden relative shrink-0"
       style={{ minHeight: "350px", maxHeight: "60vh" }}
     >
       {/* Participants Grid */}
@@ -354,16 +358,19 @@ export function InRoomCallUI() {
       </div>
 
       {/* Control Pill */}
-      <div className="pb-6 pt-4 flex items-center justify-center gap-4 bg-gradient-to-t from-[#111214] to-transparent">
-        <div className="bg-[#2b2d31] rounded-[24px] p-1.5 flex items-center shadow-2xl border border-white/5">
+      <div className="pb-6 pt-4 flex items-center justify-center gap-4 bg-gradient-to-t from-background via-background/80 to-transparent">
+        <div className="glass-panel backdrop-blur-2xl bg-card/60 rounded-[32px] p-2 flex items-center shadow-2xl border border-white/10 gap-2 relative overflow-hidden">
+          {/* Subtle glow behind buttons */}
+          <div className="absolute inset-0 bg-primary/5 blur-xl pointer-events-none"></div>
+
           {/* Mute */}
           <button
             id="call-toggle-mute"
             onClick={toggleMute}
             title={isMuted ? "Unmute" : "Mute"}
             className={cn(
-              "p-4 rounded-[18px] transition-all hover:bg-[#3f4147] text-zinc-300 hover:text-white",
-              isMuted && "text-[#f23f42] hover:bg-destructive/20 hover:text-[#f23f42]"
+              "p-4 rounded-3xl transition-all duration-300 hover:bg-white/10 text-foreground/80 hover:text-foreground hover:scale-105 active:scale-95 relative z-10",
+              isMuted && "bg-destructive/20 text-destructive hover:bg-destructive/30 hover:text-destructive border border-destructive/20"
             )}
           >
             {isMuted ? <MicOff className="w-[22px] h-[22px]" /> : <Mic className="w-[22px] h-[22px]" />}
@@ -375,10 +382,8 @@ export function InRoomCallUI() {
             onClick={toggleVideo}
             title={isVideoOn ? "Turn off camera" : "Turn on camera"}
             className={cn(
-              "p-4 rounded-[18px] transition-all hover:bg-[#3f4147] text-zinc-300 hover:text-white",
-              isVideoOn
-                ? "text-[#23a559] bg-[#23a559]/10 hover:bg-[#23a559]/20 hover:text-[#23a559]"
-                : "text-zinc-500 hover:text-zinc-300"
+              "p-4 rounded-3xl transition-all duration-300 hover:bg-white/10 text-foreground/80 hover:text-foreground hover:scale-105 active:scale-95 relative z-10",
+              isVideoOn && "text-primary bg-primary/15 hover:bg-primary/25 border border-primary/30 glow-border"
             )}
           >
             {isVideoOn ? (
@@ -394,9 +399,8 @@ export function InRoomCallUI() {
             onClick={toggleScreenShare}
             title={isScreenSharing ? "Stop sharing" : "Share screen"}
             className={cn(
-              "p-4 rounded-[18px] transition-all hover:bg-[#3f4147] text-zinc-300 hover:text-white",
-              isScreenSharing &&
-                "text-[#23a559] bg-[#23a559]/10 hover:bg-[#23a559]/20 hover:text-[#23a559]"
+              "p-4 rounded-3xl transition-all duration-300 hover:bg-white/10 text-foreground/80 hover:text-foreground hover:scale-105 active:scale-95 relative z-10",
+              isScreenSharing && "text-primary bg-primary/15 hover:bg-primary/25 border border-primary/30 glow-border"
             )}
           >
             <MonitorUp className="w-[22px] h-[22px]" />
@@ -408,8 +412,8 @@ export function InRoomCallUI() {
             onClick={toggleDeafen}
             title={isDeafened ? "Undeafen" : "Deafen"}
             className={cn(
-              "p-4 rounded-[18px] transition-all hover:bg-[#3f4147] text-zinc-300 hover:text-white",
-              isDeafened && "text-[#f23f42] hover:bg-destructive/20 hover:text-[#f23f42]"
+              "p-4 rounded-3xl transition-all duration-300 hover:bg-white/10 text-foreground/80 hover:text-foreground hover:scale-105 active:scale-95 relative z-10",
+              isDeafened && "bg-destructive/20 text-destructive hover:bg-destructive/30 hover:text-destructive border border-destructive/20"
             )}
           >
             <Headphones className="w-[22px] h-[22px]" />
@@ -420,7 +424,7 @@ export function InRoomCallUI() {
         <button
           id="call-disconnect"
           onClick={leaveCall}
-          className="bg-[#f23f42] hover:bg-[#da373c] text-white p-4 px-8 rounded-[24px] shadow-2xl transition-all active:scale-95 flex justify-center items-center gap-2 group border border-white/10"
+          className="bg-destructive hover:bg-destructive/90 text-destructive-foreground p-4 px-8 rounded-[32px] shadow-[0_0_20px_rgba(239,68,68,0.3)] transition-all duration-300 hover:scale-105 active:scale-95 flex justify-center items-center gap-2 group border border-white/20"
         >
           <PhoneOff className="w-[22px] h-[22px] group-hover:rotate-12 transition-transform" />
         </button>
@@ -462,25 +466,25 @@ export function FloatingCallWidget() {
       dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
       dragElastic={0.1}
       dragMomentum={false}
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="fixed z-[100] right-8 bottom-8 w-72 bg-[#1e1f22] border border-[#313338] shadow-2xl rounded-2xl overflow-hidden flex flex-col"
+      initial={{ opacity: 0, scale: 0.9, y: 30 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      className="fixed z-[100] right-8 bottom-8 w-72 glass-panel overflow-hidden flex flex-col shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/10 backdrop-blur-3xl rounded-[28px]"
     >
       {/* Header */}
-      <div className="bg-[#2b2d31] px-4 py-3 flex items-center gap-2 cursor-move border-b border-[#111214]">
-        <div className="w-2 h-2 rounded-full bg-[#23a559] shadow-[0_0_8px_rgba(35,165,89,0.8)]" />
-        <span className="text-sm border-none font-bold text-zinc-200 flex-1">
+      <div className="bg-primary/20 backdrop-blur-md px-5 py-3.5 flex items-center gap-3 border-b border-white/10 cursor-move transition-colors hover:bg-primary/30 group">
+        <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.8)] animate-pulse" />
+        <span className="text-sm font-bold text-primary-foreground flex-1 tracking-wide">
           Voice Connected
         </span>
-        <GripHorizontal className="w-4 h-4 text-zinc-500" />
+        <GripHorizontal className="w-5 h-5 text-white/50 group-hover:text-white/80 transition-colors" />
       </div>
 
       {/* Mini grid */}
-      <div className="grid grid-cols-2 gap-2 p-3 bg-[#111214] overflow-y-auto max-h-60 custom-scrollbar">
+      <div className="grid grid-cols-2 gap-2 p-3 bg-black/20 overflow-y-auto max-h-60 custom-scrollbar">
         {participants.map((p) => (
           <div
             key={p.socketId}
-            className="aspect-square bg-[#2b2d31] rounded-xl border border-white/5 overflow-hidden"
+            className="aspect-square bg-card/50 rounded-[20px] border border-white/5 overflow-hidden shadow-inner flex items-center justify-center p-1"
           >
             <VideoNode
               participant={p}
@@ -493,13 +497,13 @@ export function FloatingCallWidget() {
       </div>
 
       {/* Disconnect */}
-      <div className="p-3 border-t border-[#111214] bg-[#2b2d31] flex gap-2">
+      <div className="p-3 border-t border-white/10 bg-black/40 flex gap-2">
         <button
           onClick={leaveCall}
-          className="w-full py-2.5 bg-[#f23f42]/10 text-[#f23f42] hover:bg-[#f23f42] hover:text-white rounded-xl transition-all text-sm font-bold flex items-center justify-center gap-2"
+          className="w-full py-3 bg-destructive/10 text-destructive hover:bg-destructive hover:text-white rounded-[20px] transition-all duration-300 text-sm font-bold flex items-center justify-center gap-2 border border-destructive/20 hover:border-destructive shadow-lg hover:scale-[1.02] active:scale-[0.98]"
         >
           <PhoneOff className="w-4 h-4" />
-          Disconnect
+          Leave Call
         </button>
       </div>
     </motion.div>

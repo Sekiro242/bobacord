@@ -7,21 +7,39 @@ import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { SettingsModal } from "../modals/SettingsModal";
+import { useSettings } from "@/hooks/use-settings";
+import { useUnread } from "@/hooks/use-unread";
+import { useEffect } from "react";
+import { ProfilePopup } from "../chat/ProfilePopup";
 
 export function Sidebar() {
   const [location] = useLocation();
   const { user, logout } = useAuth();
   const queryClient = useQueryClient();
+  const { openSettings } = useSettings();
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  // Removed local isSettingsOpen state
   const [newGroupName, setNewGroupName] = useState("");
   const [selectedFriendIds, setSelectedFriendIds] = useState<number[]>([]);
+  const [selectedProfileId, setSelectedProfileId] = useState<number | null>(null);
 
-  const { data: friends } = useGetFriends({ request: { headers: getAuthHeaders() } });
-  const { data: groups } = useGetGroups({ request: { headers: getAuthHeaders() } });
+  const { data: friends } = useGetFriends({ request: { headers: getAuthHeaders() as HeadersInit } });
+  const { data: groups } = useGetGroups({ request: { headers: getAuthHeaders() as HeadersInit } });
+  const { unreadCounts, setInitialCounts } = useUnread();
+
+  // Initialize unread counts once data is loaded
+  useEffect(() => {
+    if (friends || groups) {
+      const dmCounts: Record<number, number> = {};
+      const groupCounts: Record<number, number> = {};
+      friends?.forEach(f => { dmCounts[f.id] = (f as any).unreadCount || 0; });
+      groups?.forEach(g => { groupCounts[g.id] = (g as any).unreadCount || 0; });
+      setInitialCounts({ dm: dmCounts, group: groupCounts });
+    }
+  }, [friends, groups, setInitialCounts]);
 
   const createGroupMutation = useCreateGroup({
-    request: { headers: getAuthHeaders() },
+    request: { headers: getAuthHeaders() as HeadersInit },
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ["/api/groups"] });
@@ -41,196 +59,233 @@ export function Sidebar() {
   const toggleFriend = (id: number) => {
     setSelectedFriendIds(prev => {
       if (prev.includes(id)) return prev.filter(x => x !== id);
-      if (prev.length >= 9) return prev; // max 9 friends + self = 10 total
+      if (prev.length >= 9) return prev;
       return [...prev, id];
     });
   };
 
   return (
-    <div className="w-64 h-screen bg-sidebar border-r border-sidebar-border flex flex-col shadow-2xl z-10">
-      {/* Top Header */}
-      <div className="h-14 border-b border-sidebar-border flex items-center px-4 shadow-sm bg-sidebar/50">
-        <h1 className="font-bold text-foreground text-lg tracking-tight">Bobacord</h1>
+    <div className="w-64 h-screen flex flex-col z-10 relative bg-[#040406]/95 backdrop-blur-3xl border-r border-white/[0.04]">
+      {/* ── Brand Header ── */}
+      <div className="h-14 flex items-center gap-3 px-5 shrink-0">
+        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#9167e4] to-[#f472b6] flex items-center justify-center shadow-[0_0_20px_rgba(145,103,228,0.45)] border border-white/20 overflow-hidden">
+          <img src="/logo.png" alt="BobaCord" className="w-full h-full object-cover" />
+        </div>
+        <h1 className="font-extrabold text-[17px] tracking-tight text-white flex items-baseline">
+          <span className="bg-clip-text text-transparent bg-gradient-to-r from-white via-white/90 to-white/60">Bobacord</span>
+        </h1>
       </div>
 
-      <div className="flex-1 overflow-y-auto py-3 custom-scrollbar">
-        {/* Friends Link */}
-        <div className="px-2 mb-4">
+      {/* Divider */}
+      <div className="mx-4 h-px bg-white/[0.05]" />
+
+      <div className="flex-1 overflow-y-auto py-4 px-2 flex flex-col gap-6">
+        {/* ── Navigation ── */}
+        <div className="space-y-0.5 px-1">
           <Link
             href="/"
             className={cn(
-              "flex items-center gap-3 px-3 py-2.5 rounded-md transition-all duration-200 group font-medium",
+              "flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all duration-200 text-sm font-semibold",
               location === "/"
-                ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
-                : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                ? "bg-white/[0.07] text-white border border-white/[0.07]"
+                : "text-white/50 hover:text-white/80 hover:bg-white/[0.04]"
             )}
           >
-            <Users className="w-5 h-5" />
+            <Users className="w-4 h-4 shrink-0" />
             Friends
           </Link>
         </div>
 
-        {/* Direct Messages Section */}
-        <div className="px-2 mb-6">
-          <div className="px-3 mb-1 flex items-center justify-between text-xs font-bold text-sidebar-foreground uppercase tracking-wider">
-            <span>Direct Messages</span>
+        {/* ── Direct Messages ── */}
+        <div className="space-y-1.5">
+          <div className="px-3 flex items-center justify-between mb-1">
+            <span className="section-label">Direct Messages</span>
           </div>
-          <div className="space-y-0.5 mt-2">
+
+          <div className="space-y-0.5 px-1">
             {friends?.map(friend => {
               const href = `/dm/${friend.id}`;
               const isActive = location === href;
+              const unread = unreadCounts.dm[friend.id] || 0;
               return (
                 <Link
                   key={friend.id}
                   href={href}
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2 rounded-md transition-all duration-200 group",
+                    "flex items-center justify-between px-3 py-2 rounded-xl transition-all duration-200 group relative",
                     isActive
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
-                      : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                      ? "bg-primary/10 text-primary border border-primary/20"
+                      : "text-white/50 hover:text-white/80 hover:bg-white/[0.04]"
                   )}
                 >
-                  <div className="relative">
-                    {friend.avatarUrl ? (
-                      <img src={friend.avatarUrl} alt={friend.username} className="w-8 h-8 rounded-full object-cover shadow-sm bg-background border border-border/50" />
-                    ) : (
-                      <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
-                        {friend.username[0].toUpperCase()}
-                      </div>
-                    )}
-                    <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-sidebar rounded-full shadow-sm"></div>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="relative shrink-0">
+                      {(friend as any).avatarUrl ? (
+                        <img
+                          src={(friend as any).avatarUrl}
+                          alt={friend.username}
+                          className="w-7 h-7 rounded-full object-cover border border-white/10"
+                        />
+                      ) : (
+                        <div className="w-7 h-7 rounded-full bg-white/[0.07] flex items-center justify-center text-white/50 font-semibold text-[11px] border border-white/10">
+                          {friend.username[0].toUpperCase()}
+                        </div>
+                      )}
+                      <div className="absolute -bottom-0.5 -right-0.5 status-dot-online w-2 h-2 border-[1.5px]" />
+                    </div>
+                    <span className="text-sm font-medium truncate">{friend.username}</span>
                   </div>
-                  <span className="truncate">{friend.username}</span>
+
+                  {unread > 0 && (
+                    <div className="min-w-[18px] h-[18px] rounded-full bg-primary text-[10px] font-bold text-white flex items-center justify-center px-1 animate-badge-new shrink-0">
+                      {unread > 99 ? "99+" : unread}
+                    </div>
+                  )}
                 </Link>
               );
             })}
-            {(!friends || friends.length === 0) && (
-              <div className="px-3 py-2 text-sm text-sidebar-foreground/60 italic">No friends yet.</div>
-            )}
           </div>
         </div>
 
-        {/* Groups Section */}
-        <div className="px-2">
-          <div className="px-3 mb-1 flex items-center justify-between text-xs font-bold text-sidebar-foreground uppercase tracking-wider group">
-            <span>Group Chats</span>
+        {/* Divider */}
+        {friends && friends.length > 0 && groups && groups.length >= 0 && (
+          <div className="mx-2 h-px bg-white/[0.04]" />
+        )}
+
+        {/* ── Group Chats ── */}
+        <div className="space-y-1.5">
+          <div className="px-3 flex items-center justify-between mb-1">
+            <span className="section-label">Group Chats</span>
             <button
               onClick={() => setIsCreatingGroup(!isCreatingGroup)}
-              className="text-sidebar-foreground hover:text-foreground transition-colors"
-              title="Create Group"
+              title="Create group chat"
+              className="text-white/30 hover:text-white/70 transition-colors p-0.5 rounded hover:bg-white/[0.06]"
             >
-              {isCreatingGroup ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+              <Plus className="w-3.5 h-3.5" />
             </button>
           </div>
 
           <AnimatePresence>
             {isCreatingGroup && (
               <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden"
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                className="px-1 mb-1"
               >
-                <form onSubmit={handleCreateGroup} className="px-3 py-2 space-y-2">
+                <form onSubmit={handleCreateGroup} className="bg-white/[0.05] rounded-xl p-3 border border-white/[0.08] space-y-2.5">
                   <input
                     autoFocus
                     value={newGroupName}
                     onChange={e => setNewGroupName(e.target.value)}
                     placeholder="Group name..."
-                    className="w-full bg-background text-sm rounded-md px-2 py-1.5 border border-border focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-foreground"
+                    className="w-full bg-black/50 text-xs rounded-lg px-3 py-2 border border-white/[0.08] focus:outline-none focus:border-primary/40 text-white placeholder:text-white/25"
                   />
-                  {friends && friends.length > 0 && (
-                    <div className="space-y-1">
-                      <p className="text-xs text-sidebar-foreground/60">Add friends (max 2):</p>
-                      {friends.map(f => (
-                        <label key={f.id} className="flex items-center gap-2 cursor-pointer text-sm text-sidebar-foreground hover:text-foreground">
-                          <input
-                            type="checkbox"
-                            checked={selectedFriendIds.includes(f.id)}
-                            onChange={() => toggleFriend(f.id)}
-                            disabled={!selectedFriendIds.includes(f.id) && selectedFriendIds.length >= 9}
-                            className="rounded accent-primary"
-                          />
-                          {f.username}
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                  <button
-                    type="submit"
-                    disabled={createGroupMutation.isPending || !newGroupName.trim()}
-                    className="w-full bg-primary text-primary-foreground py-1.5 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
-                  >
-                    {createGroupMutation.isPending ? "Creating..." : "Create Group"}
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      type="submit"
+                      disabled={createGroupMutation.isPending || !newGroupName.trim()}
+                      className="flex-1 bg-primary text-white py-1.5 rounded-lg text-xs font-semibold hover:bg-primary/85 disabled:opacity-40 transition-all"
+                    >
+                      Create
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setIsCreatingGroup(false); setNewGroupName(""); }}
+                      className="px-2.5 py-1.5 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/[0.05] transition-all"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </form>
               </motion.div>
             )}
           </AnimatePresence>
 
-          <div className="space-y-0.5 mt-2">
+          <div className="space-y-0.5 px-1">
             {groups?.map(group => {
               const href = `/group/${group.id}`;
               const isActive = location === href;
+              const unread = unreadCounts.group[group.id] || 0;
               return (
                 <Link
                   key={group.id}
                   href={href}
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2 rounded-md transition-all duration-200 group",
+                    "flex items-center justify-between px-3 py-2 rounded-xl transition-all duration-200 group",
                     isActive
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
-                      : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                      ? "bg-violet-500/10 text-violet-400 border border-violet-500/20"
+                      : "text-white/50 hover:text-white/80 hover:bg-white/[0.04]"
                   )}
                 >
-                  <Hash className="w-5 h-5 opacity-60 group-hover:opacity-100" />
-                  <span className="truncate">{group.name}</span>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-white/[0.06] flex items-center justify-center border border-white/[0.08] group-hover:border-white/[0.14] transition-colors shrink-0">
+                      <Hash className={cn("w-3.5 h-3.5 transition-opacity", isActive ? "opacity-100" : "opacity-40 group-hover:opacity-80")} />
+                    </div>
+                    <span className="text-sm font-medium truncate">{group.name}</span>
+                  </div>
+                  {unread > 0 && (
+                    <div className="min-w-[18px] h-[18px] rounded-full bg-violet-500 text-[10px] font-bold text-white flex items-center justify-center px-1 animate-badge-new shrink-0">
+                      {unread > 99 ? "99+" : unread}
+                    </div>
+                  )}
                 </Link>
               );
             })}
-            {(!groups || groups.length === 0) && (
-              <div className="px-3 py-2 text-sm text-sidebar-foreground/60 italic">No groups yet.</div>
-            )}
           </div>
         </div>
       </div>
 
-      {/* User Area */}
-      <div className="p-3 bg-sidebar-border/30 border-t border-sidebar-border flex items-center justify-between">
-        <div className="flex items-center gap-2 overflow-hidden">
-          {user?.avatarUrl ? (
-            <img src={user.avatarUrl} alt="Me" className="w-9 h-9 rounded-full object-cover shadow-sm bg-background border border-border/50 shrink-0" />
-          ) : (
-            <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold shrink-0">
-              {user?.username[0].toUpperCase()}
+      {/* ── Profile Rail ── */}
+      <div className="border-t border-white/[0.05] bg-black/20 p-3">
+        <div className="flex items-center justify-between px-2 py-1.5 rounded-xl hover:bg-white/[0.04] transition-all group">
+          <div 
+            onClick={() => setSelectedProfileId(user?.id || null)}
+            className="flex items-center gap-2.5 min-w-0 cursor-pointer"
+          >
+            <div className="relative shrink-0">
+              {(user as any)?.avatarUrl ? (
+                <img
+                  src={(user as any).avatarUrl}
+                  alt="Me"
+                  className="w-8 h-8 rounded-full object-cover border-2 border-primary/25"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm border-2 border-primary/20">
+                  {user?.username[0].toUpperCase()}
+                </div>
+              )}
+              <div className="absolute -bottom-0.5 -right-0.5 status-dot-online w-2.5 h-2.5 border-2" />
             </div>
-          )}
-          <div className="flex flex-col overflow-hidden">
-            <span className="text-sm font-bold text-foreground truncate">{user?.username}</span>
-            <span className="text-xs text-sidebar-foreground">Online</span>
+            <div className="flex flex-col min-w-0">
+              <span className="text-[13px] font-semibold text-white/90 truncate leading-tight">{user?.username}</span>
+              <span className="text-[10px] text-white/40 leading-tight">Online</span>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-0.5">
-          <button
-            onClick={() => setIsSettingsOpen(true)}
-            className="p-1.5 rounded-md text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground transition-colors shrink-0"
-            title="User Settings"
-          >
-            <Settings className="w-4.5 h-4.5" />
-          </button>
-          <button
-            onClick={logout}
-            className="p-1.5 rounded-md text-sidebar-foreground hover:bg-sidebar-accent hover:text-destructive transition-colors shrink-0"
-            title="Log out"
-          >
-            <LogOut className="w-4.5 h-4.5" />
-          </button>
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={openSettings}
+              title="Settings"
+              className="p-1.5 rounded-lg text-white/30 hover:text-white hover:bg-white/[0.06] transition-all"
+            >
+              <Settings className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={logout}
+              title="Sign out"
+              className="p-1.5 rounded-lg text-white/30 hover:text-destructive hover:bg-destructive/5 transition-all"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
 
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
+      <ProfilePopup
+        userId={selectedProfileId || 0}
+        isOpen={selectedProfileId !== null}
+        onClose={() => setSelectedProfileId(null)}
+        onEdit={openSettings}
       />
     </div>
   );

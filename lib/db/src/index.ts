@@ -11,9 +11,20 @@ sqlite.exec(`
     username TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     avatar_url TEXT,
+    bio TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now'))
   );
+`);
 
+try {
+  sqlite.exec(`ALTER TABLE users ADD COLUMN bio TEXT;`);
+} catch (e: any) {
+  if (!e.message.includes("duplicate column name")) {
+    throw e;
+  }
+}
+
+sqlite.exec(`
   CREATE TABLE IF NOT EXISTS friend_requests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sender_id INTEGER NOT NULL REFERENCES users(id),
@@ -32,7 +43,16 @@ sqlite.exec(`
   CREATE TABLE IF NOT EXISTS group_members (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     group_id INTEGER NOT NULL REFERENCES groups(id),
-    user_id INTEGER NOT NULL REFERENCES users(id)
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    last_read_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS dm_metadata (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    other_user_id INTEGER NOT NULL REFERENCES users(id),
+    last_read_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now')),
+    UNIQUE(user_id, other_user_id)
   );
 
   CREATE TABLE IF NOT EXISTS messages (

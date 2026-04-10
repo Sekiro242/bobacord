@@ -2,8 +2,8 @@ import { Server as SocketServer } from "socket.io";
 import { Server as HttpServer } from "http";
 import { verifyToken } from "./lib/auth.js";
 import { db } from "@workspace/db";
-import { messagesTable, groupMembersTable, usersTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { messagesTable, groupMembersTable, usersTable, dmMetadataTable, groupsTable } from "@workspace/db/schema";
+import { eq, and } from "drizzle-orm";
 import { logger } from "./lib/logger.js";
 
 // ─── In-memory voice room presence ───────────────────────────────────────────
@@ -66,6 +66,13 @@ export function setupSocket(httpServer: HttpServer) {
       logger.info({ from: user.id, to: data.toUserId }, "dm_message received");
       if (!data.toUserId || !data.content?.trim()) return;
       try {
+        // Fetch sender's latest avatarUrl from DB
+        const [senderRow] = await db
+          .select({ avatarUrl: usersTable.avatarUrl })
+          .from(usersTable)
+          .where(eq(usersTable.id, user.id))
+          .limit(1);
+
         const [msg] = await db
           .insert(messagesTable)
           .values({
@@ -73,6 +80,7 @@ export function setupSocket(httpServer: HttpServer) {
             content: data.content.trim(),
             dmUserId: data.toUserId,
             groupId: null,
+            createdAt: new Date().toISOString(),
           })
           .returning();
 
@@ -81,7 +89,7 @@ export function setupSocket(httpServer: HttpServer) {
           content: msg.content,
           senderId: user.id,
           senderUsername: user.username,
-          senderAvatarUrl: (user as any).avatarUrl || null,
+          senderAvatarUrl: senderRow?.avatarUrl || null,
           createdAt: msg.createdAt,
           dmUserId: msg.dmUserId,
           groupId: null,
@@ -90,6 +98,13 @@ export function setupSocket(httpServer: HttpServer) {
         logger.info({ msgId: msg.id, to: data.toUserId }, "dm_message saved, broadcasting");
         socket.emit("dm_message", payload);
         io.to(`user_${data.toUserId}`).emit("dm_message", payload);
+        // Notification with title + body so client can show desktop notification + play sound
+        io.to(`user_${data.toUserId}`).emit("unread_update", {
+          type: "dm",
+          id: user.id,
+          title: user.username,
+          body: data.content.trim().slice(0, 100),
+        });
       } catch (err) {
         logger.error({ err }, "dm_message DB error");
         socket.emit("message_error", { error: "Failed to send message" });
@@ -111,6 +126,13 @@ export function setupSocket(httpServer: HttpServer) {
           return;
         }
 
+        // Look up group name for notification title
+        const [groupRow] = await db
+          .select({ name: groupsTable.name })
+          .from(groupsTable)
+          .where(eq(groupsTable.id, data.groupId))
+          .limit(1);
+
         const [msg] = await db
           .insert(messagesTable)
           .values({
@@ -118,6 +140,7 @@ export function setupSocket(httpServer: HttpServer) {
             content: data.content.trim(),
             dmUserId: null,
             groupId: data.groupId,
+            createdAt: new Date().toISOString(),
           })
           .returning();
 
@@ -132,13 +155,54 @@ export function setupSocket(httpServer: HttpServer) {
           groupId: msg.groupId,
         };
 
+        const groupName = groupRow?.name ?? "Group";
         logger.info({ msgId: msg.id, groupId: data.groupId, memberCount: memberRows.length }, "group_message saved, broadcasting");
         for (const member of memberRows) {
           io.to(`user_${member.userId}`).emit("group_message", payload);
+          if (member.userId !== user.id) {
+            io.to(`user_${member.userId}`).emit("unread_update", {
+              type: "group",
+              id: data.groupId,
+              title: `#${groupName}`,
+              body: `${user.username}: ${data.content.trim().slice(0, 90)}`,
+            });
+          }
         }
       } catch (err) {
         logger.error({ err }, "group_message DB error");
         socket.emit("message_error", { error: "Failed to send message" });
+      }
+    });
+
+    socket.on("message_read", async (data: { type: "dm" | "group"; id: number }) => {
+      const now = new Date().toISOString();
+      try {
+        if (data.type === "dm") {
+          await db
+            .insert(dmMetadataTable)
+            .values({
+              userId: user.id,
+              otherUserId: data.id,
+              lastReadAt: now,
+            })
+            .onConflictDoUpdate({
+              target: [dmMetadataTable.userId, dmMetadataTable.otherUserId],
+              set: { lastReadAt: now },
+            });
+        } else {
+          await db
+            .update(groupMembersTable)
+            .set({ lastReadAt: now })
+            .where(
+              and(
+                eq(groupMembersTable.groupId, data.id),
+                eq(groupMembersTable.userId, user.id)
+              )
+            );
+        }
+        logger.info({ userId: user.id, type: data.type, id: data.id }, "Marked as read");
+      } catch (err) {
+        logger.error({ err }, "message_read DB error");
       }
     });
 
