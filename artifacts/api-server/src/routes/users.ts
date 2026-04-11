@@ -55,6 +55,11 @@ router.patch("/profile", requireAuth, async (req: AuthRequest, res) => {
         bio: usersTable.bio
       });
 
+    const io = req.app.get("io");
+    if (io) {
+      io.emit("user_profile_updated", updatedUser);
+    }
+
     res.json(updatedUser);
   } catch (err) {
     req.log.error({ err }, "Profile update error");
@@ -121,6 +126,11 @@ router.post("/avatar", requireAuth, upload.single("avatar"), async (req: AuthReq
         avatarUrl: usersTable.avatarUrl
       });
       
+    const io = req.app.get("io");
+    if (io) {
+      io.emit("user_profile_updated", updatedUser);
+    }
+
     res.json(updatedUser);
   } catch (err) {
     req.log.error({ err }, "Avatar upload error");

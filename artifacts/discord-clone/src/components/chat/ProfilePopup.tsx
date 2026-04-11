@@ -18,7 +18,7 @@ interface ProfilePopupProps {
   onEdit?: () => void;
 }
 
-export function ProfilePopup({ userId, isOpen, onClose }: ProfilePopupProps) {
+export function ProfilePopup({ userId, isOpen, onClose, onEdit }: ProfilePopupProps) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { user: currentUser } = useAuth();
@@ -42,6 +42,10 @@ export function ProfilePopup({ userId, isOpen, onClose }: ProfilePopupProps) {
         }
       };
       fetchProfile();
+    } else if (!isOpen) {
+      // Clear profile when closed to ensure fresh data next time
+      setProfile(null);
+      setIsLoading(true);
     }
   }, [isOpen, userId]);
 

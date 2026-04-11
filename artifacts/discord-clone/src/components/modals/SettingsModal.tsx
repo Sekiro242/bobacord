@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X, Camera, Save, Loader2, User, Palette, Shield } from "lucide-react";
 import { useAuth, getAuthHeaders } from "@/hooks/use-auth";
 import { useQueryClient } from "@tanstack/react-query";
@@ -31,11 +31,26 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
+  // Sync local state with user data whenever the modal opens or user changes
+  useEffect(() => {
+    if (isOpen && user) {
+      setUsername(user.username || "");
+      setBio((user as any).bio || "");
+      setAvatarUrl((user as any).avatarUrl || "");
+      setAvatarFile(null);
+      setAvatarPreview(null);
+      setError(null);
+      setSuccess(false);
+    }
+  }, [isOpen, user]);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setAvatarFile(file);
-      setAvatarPreview(URL.createObjectURL(file));
+      const url = URL.createObjectURL(file);
+      setAvatarPreview(url);
+      // Optional: store the url to revoke it later
     }
   };
 
@@ -46,9 +61,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     setSuccess(false);
 
     try {
-      let finalAvatarUrl = avatarUrl;
       const headers = getAuthHeaders();
+      let currentAvatarUrl = avatarUrl;
 
+      // 1. Handle Avatar Upload if a new file was selected
       if (avatarFile) {
         const formData = new FormData();
         formData.append("avatar", avatarFile);
@@ -59,10 +75,21 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         });
         if (!uploadResp.ok) throw new Error("Failed to upload image");
         const uploadData = await uploadResp.json();
-        finalAvatarUrl = uploadData.avatarUrl;
+        currentAvatarUrl = uploadData.avatarUrl;
+        
+        // Cleanup the object URL
+        if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+        setAvatarPreview(null);
+        setAvatarFile(null);
+        setAvatarUrl(currentAvatarUrl);
       }
 
-      if (username !== user?.username || (!avatarFile && avatarUrl !== (user as any)?.avatarUrl)) {
+      // 2. Update Profile (Username/Bio/AvatarUrl) if anything changed
+      const hasUsernameChanged = username !== user?.username;
+      const hasBioChanged = bio !== ((user as any)?.bio || "");
+      const hasAvatarUrlChanged = currentAvatarUrl !== ((user as any)?.avatarUrl || "");
+
+      if (hasUsernameChanged || hasBioChanged || hasAvatarUrlChanged) {
         const resp = await fetch("/api/users/profile", {
           method: "PATCH",
           headers: {
@@ -71,17 +98,23 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           } as HeadersInit,
           body: JSON.stringify({
             username,
-            avatarUrl: avatarFile ? finalAvatarUrl : avatarUrl,
             bio,
+            avatarUrl: currentAvatarUrl,
           }),
         });
-        if (!resp.ok) throw new Error("Failed to update profile");
+        
+        if (!resp.ok) {
+          const errorData = await resp.json();
+          throw new Error(errorData.error || "Failed to update profile");
+        }
       }
 
+      // 3. Refresh user data
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       setSuccess(true);
-      setTimeout(() => setSuccess(false), 2000);
+      setTimeout(() => setSuccess(false), 3000);
     } catch (err: any) {
+      console.error("Save error:", err);
       setError(err.message);
     } finally {
       setIsSaving(false);
@@ -199,7 +232,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                             Avatar URL
                           </label>
                           <input
-                            type="url"
+                            type="text"
                             value={avatarUrl || ""}
                             onChange={(e) => {
                               setAvatarUrl(e.target.value);

@@ -75,16 +75,25 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
     res.status(400).json({ error: "name and memberIds required" });
     return;
   }
-  const allMembers = Array.from(new Set([userId, ...memberIds]));
-  if (allMembers.length > 10) {
-    res.status(400).json({ error: "Max 10 members per group" });
-    return;
-  }
   try {
+    const allMembers = Array.from(new Set([userId, ...memberIds]));
+    if (allMembers.length > 10) {
+      res.status(400).json({ error: "Max 10 members per group" });
+      return;
+    }
+
     const [group] = await db
       .insert(groupsTable)
-      .values({ name, createdById: userId, createdAt: new Date().toISOString() })
+      .values({ 
+        name, 
+        createdById: userId, 
+        createdAt: new Date().toISOString() 
+      })
       .returning();
+
+    if (!group) {
+      throw new Error("Failed to create group record");
+    }
 
     await db.insert(groupMembersTable).values(
       allMembers.map((uid) => ({ 
@@ -112,8 +121,50 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
     }
 
     res.json({ ...group, members: memberRows });
-  } catch (err) {
+  } catch (err: any) {
     req.log.error({ err }, "Create group error");
+    res.status(500).json({ error: err.message || "Internal server error" });
+  }
+});
+
+router.get("/:groupId", requireAuth, async (req: AuthRequest, res) => {
+  const userId = req.user!.id;
+  const groupId = parseInt(req.params.groupId as string);
+  if (isNaN(groupId)) {
+    res.status(400).json({ error: "Invalid groupId" });
+    return;
+  }
+  try {
+    const [group] = await db
+      .select()
+      .from(groupsTable)
+      .where(eq(groupsTable.id, groupId))
+      .limit(1);
+
+    if (!group) {
+      res.status(404).json({ error: "Group not found" });
+      return;
+    }
+
+    const memberRows = await db
+      .select({
+        id: usersTable.id,
+        username: usersTable.username,
+        avatarUrl: usersTable.avatarUrl
+      })
+      .from(groupMembersTable)
+      .innerJoin(usersTable, eq(groupMembersTable.userId, usersTable.id))
+      .where(eq(groupMembersTable.groupId, groupId));
+
+    const isMember = memberRows.some((m) => m.id === userId);
+    if (!isMember) {
+      res.status(403).json({ error: "Not a member" });
+      return;
+    }
+
+    res.json({ ...group, members: memberRows });
+  } catch (err) {
+    req.log.error({ err }, "Get group details error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -126,14 +177,6 @@ router.get("/:groupId/messages", requireAuth, async (req: AuthRequest, res) => {
     return;
   }
   try {
-    const [membership] = await db
-      .select()
-      .from(groupMembersTable)
-      .where(
-        eq(groupMembersTable.groupId, groupId)
-      )
-      .limit(100);
-
     const memberRows = await db
       .select()
       .from(groupMembersTable)

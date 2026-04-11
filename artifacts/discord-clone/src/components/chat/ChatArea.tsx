@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Send, Phone, Volume2, VolumeX } from "lucide-react";
+import { Send, Phone, Volume2, VolumeX, Users } from "lucide-react";
 import { format, isToday, isYesterday } from "date-fns";
 import { useSocket } from "@/hooks/use-socket";
 import { useAuth, getAuthHeaders } from "@/hooks/use-auth";
@@ -13,6 +13,7 @@ import { useNotifications } from "@/hooks/use-notifications";
 import { motion, AnimatePresence } from "framer-motion";
 import { ProfilePopup } from "./ProfilePopup";
 import { useSettings } from "@/hooks/use-settings";
+import { MemberSidebar } from "./MemberSidebar";
 
 interface ChatAreaProps {
   type: "dm" | "group";
@@ -54,6 +55,7 @@ export function ChatArea({ type, id, name, targetUserIds = [] }: ChatAreaProps) 
   const bottomRef = useRef<HTMLDivElement>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<number | null>(null);
   const { openSettings } = useSettings();
+  const [showMembers, setShowMembers] = useState(true);
 
   // Mark as read on entry and when ID changes
   useEffect(() => {
@@ -142,7 +144,7 @@ export function ChatArea({ type, id, name, targetUserIds = [] }: ChatAreaProps) 
   };
 
   // Allow Shift+Enter for newlines, Enter to send
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       if (newMessage.trim()) {
@@ -203,148 +205,182 @@ export function ChatArea({ type, id, name, targetUserIds = [] }: ChatAreaProps) 
               <span>Start Call</span>
             </button>
           )}
+
+          {type === "group" && (
+            <button
+              onClick={() => setShowMembers(!showMembers)}
+              title={showMembers ? "Hide member list" : "Show member list"}
+              className={cn(
+                "p-2 rounded-lg transition-all",
+                showMembers 
+                  ? "text-primary bg-primary/10 border border-primary/20" 
+                  : "text-white/30 hover:text-white/70 hover:bg-white/[0.05]"
+              )}
+            >
+              <Users className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
       {inThisCall && <InRoomCallUI />}
 
-      {/* ── Messages Area ── */}
-      <div
-        className="flex-1 overflow-y-auto px-6 py-6 space-y-0.5 relative z-10"
-        ref={scrollRef}
-      >
-        {isLoading ? (
-          <div className="flex h-full items-center justify-center">
-            <div className="flex flex-col items-center gap-3">
-              <div className="flex gap-1">
-                {[0, 1, 2].map(i => (
-                  <div
-                    key={i}
-                    className="w-1.5 h-1.5 rounded-full bg-primary/40 animate-bounce"
-                    style={{ animationDelay: `${i * 0.15}s` }}
-                  />
-                ))}
+      <div className="flex-1 flex overflow-hidden">
+        {/* ── Messages Area ── */}
+        <div
+          className="flex-1 overflow-y-auto px-6 py-6 space-y-0.5 relative z-10"
+          ref={scrollRef}
+        >
+          {isLoading ? (
+            <div className="flex h-full items-center justify-center">
+              <div className="flex flex-col items-center gap-3">
+                <div className="flex gap-1">
+                  {[0, 1, 2].map(i => (
+                    <div
+                      key={i}
+                      className="w-1.5 h-1.5 rounded-full bg-primary/40 animate-bounce"
+                      style={{ animationDelay: `${i * 0.15}s` }}
+                    />
+                  ))}
+                </div>
+                <span className="text-white/30 text-xs font-medium">Loading messages…</span>
               </div>
-              <span className="text-white/30 text-xs font-medium">Loading messages…</span>
             </div>
-          </div>
-        ) : messages?.length === 0 ? (
-          <div className="flex flex-col h-[65vh] items-center justify-center text-center space-y-6 animate-fade-up">
-            <div className="relative">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-primary/20 to-violet-500/20 flex items-center justify-center border border-white/[0.07]">
-                <span className="text-3xl font-bold text-white/50">{type === "group" ? "#" : "@"}</span>
+          ) : messages?.length === 0 ? (
+            <div className="flex flex-col h-[65vh] items-center justify-center text-center space-y-6 animate-fade-up">
+              <div className="relative">
+                <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-primary/20 to-violet-500/20 flex items-center justify-center border border-white/[0.07]">
+                  <span className="text-3xl font-bold text-white/50">{type === "group" ? "#" : "@"}</span>
+                </div>
+                <div className="absolute -inset-4 bg-primary/5 blur-2xl rounded-full -z-10 animate-pulse" />
               </div>
-              <div className="absolute -inset-4 bg-primary/5 blur-2xl rounded-full -z-10 animate-pulse" />
+              <div className="space-y-1.5">
+                <h3 className="text-xl font-semibold text-white/80 tracking-tight">
+                  Start a conversation with {name}
+                </h3>
+                <p className="text-sm text-white/35 font-normal">Be the first to say hello! 👋</p>
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <h3 className="text-xl font-semibold text-white/80 tracking-tight">
-                Start a conversation with {name}
-              </h3>
-              <p className="text-sm text-white/35 font-normal">Be the first to say hello! 👋</p>
-            </div>
-          </div>
-        ) : (
-          <>
-            {messages?.map((msg, idx) => {
-              const isMe = msg.senderId === user?.id;
-              const prevMsg = idx > 0 ? messages[idx - 1] : null;
-              const isContinuation = prevMsg ? isConsecutiveMessage(prevMsg, msg) : false;
+          ) : (
+            <>
+              {messages?.map((msg, idx) => {
+                const isMe = msg.senderId === user?.id;
+                const prevMsg = idx > 0 ? messages[idx - 1] : null;
+                const isContinuation = prevMsg ? isConsecutiveMessage(prevMsg, msg) : false;
 
-              // Show a date separator when the day changes
-              const showDateSep = !prevMsg ||
-                new Date(msg.createdAt).toDateString() !== new Date(prevMsg.createdAt).toDateString();
+                // Show a date separator when the day changes
+                const showDateSep = !prevMsg ||
+                  new Date(msg.createdAt).toDateString() !== new Date(prevMsg.createdAt).toDateString();
 
-              return (
-                <div key={msg.id}>
-                  {/* ── Date separator ── */}
-                  {showDateSep && (
-                    <div className="flex items-center gap-3 my-4">
-                      <div className="flex-1 h-px bg-white/[0.05]" />
-                      <span className="text-[11px] font-medium text-white/30 px-2">
-                        {isToday(new Date(msg.createdAt))
-                          ? "Today"
-                          : isYesterday(new Date(msg.createdAt))
-                          ? "Yesterday"
-                          : format(new Date(msg.createdAt), "MMMM d, yyyy")}
-                      </span>
-                      <div className="flex-1 h-px bg-white/[0.05]" />
-                    </div>
-                  )}
-
-                  {/* ── Message bubble ── */}
-                  <motion.div
-                    initial={isContinuation ? false : { opacity: 0, x: -6 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.18 }}
-                    className={cn(
-                      "flex gap-3 group px-3 py-0.5 -mx-3 rounded-lg transition-colors duration-150 hover:bg-white/[0.02]",
-                      !isContinuation && "mt-4"
-                    )}
-                  >
-                    {/* Avatar column */}
-                    {!isContinuation ? (
-                      <div className="relative shrink-0 mt-0.5">
-                        {(msg as any).senderAvatarUrl ? (
-                          <img
-                            src={(msg as any).senderAvatarUrl}
-                            alt={msg.senderUsername}
-                            className="w-9 h-9 rounded-full object-cover border border-white/[0.08]"
-                          />
-                        ) : (
-                          <div className="w-9 h-9 rounded-full bg-white/[0.06] flex items-center justify-center text-white/35 font-semibold text-sm border border-white/[0.08]">
-                            {msg.senderUsername[0].toUpperCase()}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      /* Timestamp hint on hover for continuation messages */
-                      <div className="w-9 shrink-0 flex items-end justify-center pb-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <span className="text-[9px] text-white/25 font-medium leading-none">
-                          {formatShortTime(msg.createdAt)}
+                return (
+                  <div key={msg.id}>
+                    {/* ── Date separator ── */}
+                    {showDateSep && (
+                      <div className="flex items-center gap-3 my-4">
+                        <div className="flex-1 h-px bg-white/[0.05]" />
+                        <span className="text-[11px] font-medium text-white/30 px-2">
+                          {isToday(new Date(msg.createdAt))
+                            ? "Today"
+                            : isYesterday(new Date(msg.createdAt))
+                            ? "Yesterday"
+                            : format(new Date(msg.createdAt), "MMMM d, yyyy")}
                         </span>
+                        <div className="flex-1 h-px bg-white/[0.05]" />
                       </div>
                     )}
 
-                    {/* Content column */}
-                    <div className="flex flex-col min-w-0 flex-1">
-                      {/* Header: username + timestamp */}
-                      {!isContinuation && (
-                        <div className="flex items-baseline gap-2 mb-0.5">
-                          <span 
-                            onClick={() => setSelectedProfileId(msg.senderId)}
-                            className={cn(
-                              "font-semibold text-[13px] leading-tight hover:underline cursor-pointer",
-                              isMe ? "text-primary" : "text-white/85"
-                            )}
-                          >
-                            {msg.senderUsername}
-                          </span>
-                          {/* Discord-style timestamp: "Today at 2:32 PM" */}
-                          <span className="text-[10px] font-normal text-white/30">
-                            {formatMessageTime(msg.createdAt)}
+                    {/* ── Message bubble ── */}
+                    <motion.div
+                      initial={isContinuation ? false : { opacity: 0, x: -6 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.18 }}
+                      className={cn(
+                        "flex gap-3 group px-3 py-0.5 -mx-3 rounded-lg transition-colors duration-150 hover:bg-white/[0.02]",
+                        !isContinuation && "mt-4"
+                      )}
+                    >
+                      {/* Avatar column */}
+                      {!isContinuation ? (
+                        <div className="relative shrink-0 mt-0.5" 
+                             onClick={() => setSelectedProfileId(msg.senderId)}
+                        >
+                          {(msg as any).senderAvatarUrl ? (
+                            <img
+                              src={(msg as any).senderAvatarUrl}
+                              alt={msg.senderUsername}
+                              className="w-9 h-9 rounded-full object-cover border border-white/[0.08] cursor-pointer hover:border-white/20 transition-all"
+                            />
+                          ) : (
+                            <div className="w-9 h-9 rounded-full bg-white/[0.06] flex items-center justify-center text-white/35 font-semibold text-sm border border-white/[0.08] cursor-pointer hover:border-white/20 transition-all">
+                              {msg.senderUsername[0].toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        /* Timestamp hint on hover for continuation messages */
+                        <div className="w-9 shrink-0 flex items-end justify-center pb-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <span className="text-[9px] text-white/25 font-medium leading-none">
+                            {formatShortTime(msg.createdAt)}
                           </span>
                         </div>
                       )}
-                      {/* Message text */}
-                      <p className={cn(
-                        "text-[14px] leading-relaxed whitespace-pre-wrap break-words font-normal",
-                        isMe ? "text-white/95" : "text-white/80"
-                      )}>
-                        {msg.content}
-                      </p>
-                    </div>
-                  </motion.div>
-                </div>
-              );
-            })}
-            {/* Invisible anchor for auto-scroll */}
-            <div ref={bottomRef} />
-          </>
-        )}
+
+                      {/* Content column */}
+                      <div className="flex flex-col min-w-0 flex-1">
+                        {/* Header: username + timestamp */}
+                        {!isContinuation && (
+                          <div className="flex items-baseline gap-2 mb-0.5">
+                            <span 
+                              onClick={() => setSelectedProfileId(msg.senderId)}
+                              className={cn(
+                                "font-semibold text-[13px] leading-tight hover:underline cursor-pointer",
+                                isMe ? "text-primary" : "text-white/85"
+                              )}
+                            >
+                              {msg.senderUsername}
+                            </span>
+                            {/* Discord-style timestamp: "Today at 2:32 PM" */}
+                            <span className="text-[10px] font-normal text-white/30">
+                              {formatMessageTime(msg.createdAt)}
+                            </span>
+                          </div>
+                        )}
+                        {/* Message text */}
+                        <p className={cn(
+                          "text-[14px] leading-relaxed whitespace-pre-wrap break-words font-normal",
+                          isMe ? "text-white/95" : "text-white/80"
+                        )}>
+                          {msg.content}
+                        </p>
+                      </div>
+                    </motion.div>
+                  </div>
+                );
+              })}
+              {/* Invisible anchor for auto-scroll */}
+              <div ref={bottomRef} />
+            </>
+          )}
+        </div>
+
+        {/* Member Sidebar */}
+        <AnimatePresence>
+          {type === "group" && showMembers && (
+            <motion.div
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 240, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.2, ease: "easeInOut" }}
+              className="overflow-hidden border-l border-white/[0.04]"
+            >
+              <MemberSidebar groupId={id} />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* ── Input Area ── */}
-      <div className="px-6 pb-5 pt-3 relative z-20">
+      <div className="px-6 pb-5 pt-3 relative z-20 bg-black/20 backdrop-blur-sm border-t border-white/[0.02]">
         <div className="relative group">
           {/* Focus glow ring */}
           <div className="absolute -inset-[1px] bg-gradient-to-r from-primary/25 via-violet-500/25 to-primary/25 rounded-2xl blur-sm opacity-0 group-focus-within:opacity-100 transition-opacity duration-400" />

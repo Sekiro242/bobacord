@@ -144,12 +144,19 @@ export function setupSocket(httpServer: HttpServer) {
           })
           .returning();
 
+        // Look up sender's avatar
+        const [senderRow] = await db
+          .select({ avatarUrl: usersTable.avatarUrl })
+          .from(usersTable)
+          .where(eq(usersTable.id, user.id))
+          .limit(1);
+
         const payload = {
           id: msg.id,
           content: msg.content,
           senderId: user.id,
           senderUsername: user.username,
-          senderAvatarUrl: (user as any).avatarUrl || null,
+          senderAvatarUrl: senderRow?.avatarUrl || null,
           createdAt: msg.createdAt,
           dmUserId: null,
           groupId: msg.groupId,

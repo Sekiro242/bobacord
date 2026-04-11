@@ -181,7 +181,46 @@ export function Sidebar() {
                     placeholder="Group name..."
                     className="w-full bg-black/50 text-xs rounded-lg px-3 py-2 border border-white/[0.08] focus:outline-none focus:border-primary/40 text-white placeholder:text-white/25"
                   />
-                  <div className="flex gap-2">
+                  
+                  {friends && friends.length > 0 && (
+                    <div className="space-y-1 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
+                      <span className="text-[10px] uppercase tracking-wider font-bold text-white/20 px-1">Select Friends ({selectedFriendIds.length}/9)</span>
+                      {friends.map(friend => {
+                        const isSelected = selectedFriendIds.includes(friend.id);
+                        return (
+                          <div
+                            key={friend.id}
+                            onClick={() => toggleFriend(friend.id)}
+                            className={cn(
+                              "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all border",
+                              isSelected 
+                                ? "bg-primary/20 border-primary/30 text-white" 
+                                : "hover:bg-white/[0.05] border-transparent text-white/40 hover:text-white/60"
+                            )}
+                          >
+                            <div className="relative shrink-0">
+                              {(friend as any).avatarUrl ? (
+                                <img src={(friend as any).avatarUrl} alt="" className="w-5 h-5 rounded-full object-cover" />
+                              ) : (
+                                <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-[9px] font-bold">
+                                  {friend.username[0].toUpperCase()}
+                                </div>
+                              )}
+                            </div>
+                            <span className="text-[11px] font-medium truncate flex-1">{friend.username}</span>
+                            <div className={cn(
+                              "w-3.5 h-3.5 rounded border flex items-center justify-center transition-all",
+                              isSelected ? "bg-primary border-primary" : "border-white/10"
+                            )}>
+                              {isSelected && <div className="w-1.5 h-1.5 rounded-sm bg-white" />}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div className="flex gap-2 pt-1">
                     <button
                       type="submit"
                       disabled={createGroupMutation.isPending || !newGroupName.trim()}

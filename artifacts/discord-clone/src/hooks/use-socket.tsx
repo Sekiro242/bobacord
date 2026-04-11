@@ -68,10 +68,22 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       queryClient.invalidateQueries({ queryKey: ["/api/friends/requests"] });
     });
 
+    newSocket.on('friend_request_sent', () => {
+      console.log('[Socket] Friend request sent - refreshing');
+      queryClient.invalidateQueries({ queryKey: ["/api/friends/requests"] });
+    });
+
     newSocket.on('friend_request_accepted', () => {
       console.log('[Socket] Friend request accepted - refreshing');
       queryClient.invalidateQueries({ queryKey: ["/api/friends"] });
       queryClient.invalidateQueries({ queryKey: ["/api/friends/requests"] });
+    });
+
+    newSocket.on('user_profile_updated', () => {
+      console.log('[Socket] User profile updated - refreshing related data');
+      queryClient.invalidateQueries({ queryKey: ["/api/friends"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/friends/requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/groups"] });
     });
 
     newSocket.on('dm_message', () => {
@@ -90,7 +102,9 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       console.log('[Socket] Cleaning up socket connection');
       newSocket.off('group_created');
       newSocket.off('friend_request_received');
+      newSocket.off('friend_request_sent');
       newSocket.off('friend_request_accepted');
+      newSocket.off('user_profile_updated');
       newSocket.off('dm_message');
       newSocket.off('group_message');
       newSocket.disconnect();
