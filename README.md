@@ -207,21 +207,3 @@ Contributions are what make the open-source community such an amazing place to l
 3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
 4. Push to the Branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
-
----
-
-## 📄 License
-
-Distributed under the **MIT License**. See `LICENSE` for more information.
-
----
-
-## ✍️ Author / Credits
-
-Designed and engineered with ❤️ by [Your Name].
-
-- [GitHub Profile](https://github.com/yourusername)
-- [Twitter / X](https://twitter.com/yourusername)
-- [LinkedIn](https://linkedin.com/in/yourusername)
-
-*Special thanks to the Mediasoup, Vite, and Drizzle teams for providing the incredible tooling that makes this possible.*
