@@ -190,7 +190,6 @@ bobacord/
 
 ## 🗺️ Future Improvements / Roadmap
 
-- [ ] **Video & Screen Sharing:** Complete the frontend integration to consume video tracks from the Voice Server.
 - [ ] **Typing Indicators:** Real-time visual feedback when a user is typing a message in DM/Groups.
 - [ ] **Read Receipts:** Sync message read states properly across multiple active devices.
 - [ ] **Message Attachments:** Allow users to upload and share images/files via AWS S3 / Cloudflare R2.
