@@ -2,7 +2,7 @@
 
 # 🧋 BobaCord
 
-**A highly polished, scalable, and real-time Discord clone featuring Mediasoup SFU Voice & Video Channels.**
+**A highly polished, scalable, and real-time communication platform featuring Mediasoup SFU Voice & Video Channels.**
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)](#)
 [![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](#)
@@ -20,7 +20,7 @@
 
 ## 📖 Project Overview
 
-**BobaCord** is a fully functional, production-ready web application designed to replicate and iterate upon the core features of Discord. It was built to demonstrate how to implement scalable real-time systems by combining standard WebSocket message brokering with an advanced Mediasoup-powered SFU (Selective Forwarding Unit) for voice and video media routing.
+**BobaCord** is a fully functional, production-ready web application designed for high-fidelity communication. It was built to demonstrate how to implement scalable real-time systems by combining standard WebSocket message brokering with an advanced Mediasoup-powered SFU (Selective Forwarding Unit) for voice and video media routing.
 
 **The Problem it Solves:** 
 Building a scalable real-time application that handles both instant messaging and peer-to-peer/multi-party voice calls is notoriously complex. BobaCord provides a clean, monorepo-based architecture that separates signaling, data persistence, and heavy media routing into easily understandable microservices. 
