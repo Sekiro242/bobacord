@@ -12,6 +12,7 @@ import { IncomingCallModal } from "@/components/IncomingCallModal";
 import { FloatingCallWidget } from "@/components/ActiveCallOverlay";
 import { SettingsModal } from "@/components/modals/SettingsModal";
 import { useSettings } from "@/hooks/use-settings";
+import { TypingProvider } from "@/hooks/use-typing";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -65,9 +66,11 @@ function App() {
       <SocketProvider>
         <UnreadProvider>
           <VoiceSFUProvider>
-            <TooltipProvider>
-              <AppWithCallModal />
-            </TooltipProvider>
+            <TypingProvider>
+              <TooltipProvider>
+                <AppWithCallModal />
+              </TooltipProvider>
+            </TypingProvider>
           </VoiceSFUProvider>
         </UnreadProvider>
       </SocketProvider>
