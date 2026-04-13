@@ -213,6 +213,42 @@ export function setupSocket(httpServer: HttpServer) {
       }
     });
 
+    socket.on("typing_status", async (data: { type: "dm" | "group"; id: number; isTyping: boolean }) => {
+      try {
+        if (data.type === "dm") {
+          io.to(`user_${data.id}`).emit("typing_update", {
+            type: "dm",
+            id: user.id,
+            userId: user.id,
+            username: user.username,
+            isTyping: data.isTyping,
+          });
+        } else {
+          const memberRows = await db
+            .select({ userId: groupMembersTable.userId })
+            .from(groupMembersTable)
+            .where(eq(groupMembersTable.groupId, data.id));
+            
+          const isMember = memberRows.some((m) => m.userId === user.id);
+          if (!isMember) return;
+
+          for (const member of memberRows) {
+            if (member.userId !== user.id) {
+              io.to(`user_${member.userId}`).emit("typing_update", {
+                type: "group",
+                id: data.id,
+                userId: user.id,
+                username: user.username,
+                isTyping: data.isTyping,
+              });
+            }
+          }
+        }
+      } catch (err) {
+        logger.error({ err }, "typing_status error");
+      }
+    });
+
     // ─── CALL RINGING SYSTEM ──────────────────────────────────────────────────
     // (Unchanged — this is UI signaling, not media signaling)
 

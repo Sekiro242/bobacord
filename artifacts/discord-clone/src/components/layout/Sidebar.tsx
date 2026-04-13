@@ -11,6 +11,8 @@ import { useSettings } from "@/hooks/use-settings";
 import { useUnread } from "@/hooks/use-unread";
 import { useEffect } from "react";
 import { ProfilePopup } from "../chat/ProfilePopup";
+import { useTyping } from "@/hooks/use-typing";
+import { TypingIndicator } from "../ui/TypingIndicator";
 
 export function Sidebar() {
   const [location] = useLocation();
@@ -26,6 +28,7 @@ export function Sidebar() {
   const { data: friends } = useGetFriends({ request: { headers: getAuthHeaders() as HeadersInit } });
   const { data: groups } = useGetGroups({ request: { headers: getAuthHeaders() as HeadersInit } });
   const { unreadCounts, setInitialCounts } = useUnread();
+  const { getTypingUsers } = useTyping();
 
   // Initialize unread counts once data is loaded
   useEffect(() => {
@@ -106,44 +109,50 @@ export function Sidebar() {
             {friends?.map(friend => {
               const href = `/dm/${friend.id}`;
               const isActive = location === href;
-              const unread = unreadCounts.dm[friend.id] || 0;
-              return (
-                <Link
-                  key={friend.id}
-                  href={href}
-                  className={cn(
-                    "flex items-center justify-between px-3 py-2 rounded-xl transition-all duration-200 group relative",
-                    isActive
-                      ? "bg-primary/10 text-primary border border-primary/20"
-                      : "text-white/50 hover:text-white/80 hover:bg-white/[0.04]"
-                  )}
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="relative shrink-0">
-                      {(friend as any).avatarUrl ? (
-                        <img
-                          src={(friend as any).avatarUrl}
-                          alt={friend.username}
-                          className="w-7 h-7 rounded-full object-cover border border-white/10"
-                        />
-                      ) : (
-                        <div className="w-7 h-7 rounded-full bg-white/[0.07] flex items-center justify-center text-white/50 font-semibold text-[11px] border border-white/10">
-                          {friend.username[0].toUpperCase()}
-                        </div>
+                  const unread = unreadCounts.dm[friend.id] || 0;
+                  const typingUsers = getTypingUsers("dm", friend.id);
+                  return (
+                    <Link
+                      key={friend.id}
+                      href={href}
+                      className={cn(
+                        "flex items-center justify-between px-3 py-2 rounded-xl transition-all duration-200 group relative",
+                        isActive
+                          ? "bg-primary/10 text-primary border border-primary/20"
+                          : "text-white/50 hover:text-white/80 hover:bg-white/[0.04]"
                       )}
-                      <div className="absolute -bottom-0.5 -right-0.5 status-dot-online w-2 h-2 border-[1.5px]" />
-                    </div>
-                    <span className="text-sm font-medium truncate">{friend.username}</span>
-                  </div>
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="relative shrink-0">
+                          {(friend as any).avatarUrl ? (
+                            <img
+                              src={(friend as any).avatarUrl}
+                              alt={friend.username}
+                              className="w-7 h-7 rounded-full object-cover border border-white/10"
+                            />
+                          ) : (
+                            <div className="w-7 h-7 rounded-full bg-white/[0.07] flex items-center justify-center text-white/50 font-semibold text-[11px] border border-white/10">
+                              {friend.username[0].toUpperCase()}
+                            </div>
+                          )}
+                          <div className="absolute -bottom-0.5 -right-0.5 status-dot-online w-2 h-2 border-[1.5px]" />
+                        </div>
+                        <span className="text-sm font-medium truncate">{friend.username}</span>
+                      </div>
 
-                  {unread > 0 && (
-                    <div className="min-w-[18px] h-[18px] rounded-full bg-primary text-[10px] font-bold text-white flex items-center justify-center px-1 animate-badge-new shrink-0">
-                      {unread > 99 ? "99+" : unread}
-                    </div>
-                  )}
-                </Link>
-              );
-            })}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {typingUsers.length > 0 && (
+                          <TypingIndicator size="sm" className="bg-transparent border-none px-0" />
+                        )}
+                        {unread > 0 && typingUsers.length === 0 && (
+                          <div className="min-w-[18px] h-[18px] rounded-full bg-primary text-[10px] font-bold text-white flex items-center justify-center px-1 animate-badge-new">
+                            {unread > 99 ? "99+" : unread}
+                          </div>
+                        )}
+                      </div>
+                    </Link>
+                  );
+                })}
           </div>
         </div>
 
@@ -246,6 +255,7 @@ export function Sidebar() {
               const href = `/group/${group.id}`;
               const isActive = location === href;
               const unread = unreadCounts.group[group.id] || 0;
+              const typingUsers = getTypingUsers("group", group.id);
               return (
                 <Link
                   key={group.id}
@@ -263,11 +273,16 @@ export function Sidebar() {
                     </div>
                     <span className="text-sm font-medium truncate">{group.name}</span>
                   </div>
-                  {unread > 0 && (
-                    <div className="min-w-[18px] h-[18px] rounded-full bg-violet-500 text-[10px] font-bold text-white flex items-center justify-center px-1 animate-badge-new shrink-0">
-                      {unread > 99 ? "99+" : unread}
-                    </div>
-                  )}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {typingUsers.length > 0 && (
+                      <TypingIndicator size="sm" className="bg-transparent border-none px-0" />
+                    )}
+                    {unread > 0 && typingUsers.length === 0 && (
+                      <div className="min-w-[18px] h-[18px] rounded-full bg-violet-500 text-[10px] font-bold text-white flex items-center justify-center px-1 animate-badge-new">
+                        {unread > 99 ? "99+" : unread}
+                      </div>
+                    )}
+                  </div>
                 </Link>
               );
             })}

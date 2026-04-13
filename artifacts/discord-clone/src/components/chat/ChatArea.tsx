@@ -14,6 +14,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ProfilePopup } from "./ProfilePopup";
 import { useSettings } from "@/hooks/use-settings";
 import { MemberSidebar } from "./MemberSidebar";
+import { useTyping } from "@/hooks/use-typing";
+import { TypingIndicator } from "@/components/ui/TypingIndicator";
 
 interface ChatAreaProps {
   type: "dm" | "group";
@@ -56,6 +58,9 @@ export function ChatArea({ type, id, name, targetUserIds = [] }: ChatAreaProps) 
   const [selectedProfileId, setSelectedProfileId] = useState<number | null>(null);
   const { openSettings } = useSettings();
   const [showMembers, setShowMembers] = useState(true);
+  const { getTypingUsers } = useTyping();
+  const typingUsers = getTypingUsers(type, id);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Mark as read on entry and when ID changes
   useEffect(() => {
@@ -141,6 +146,24 @@ export function ChatArea({ type, id, name, targetUserIds = [] }: ChatAreaProps) 
     }
 
     setNewMessage("");
+
+    // Stop typing when message is sent
+    socket.emit("typing_status", { type, id, isTyping: false });
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setNewMessage(e.target.value);
+
+    if (!socket || !user) return;
+
+    socket.emit("typing_status", { type, id, isTyping: true });
+
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+
+    typingTimeoutRef.current = setTimeout(() => {
+      socket.emit("typing_status", { type, id, isTyping: false });
+    }, 2000);
   };
 
   // Allow Shift+Enter for newlines, Enter to send
@@ -212,8 +235,8 @@ export function ChatArea({ type, id, name, targetUserIds = [] }: ChatAreaProps) 
               title={showMembers ? "Hide member list" : "Show member list"}
               className={cn(
                 "p-2 rounded-lg transition-all",
-                showMembers 
-                  ? "text-primary bg-primary/10 border border-primary/20" 
+                showMembers
+                  ? "text-primary bg-primary/10 border border-primary/20"
                   : "text-white/30 hover:text-white/70 hover:bg-white/[0.05]"
               )}
             >
@@ -282,8 +305,8 @@ export function ChatArea({ type, id, name, targetUserIds = [] }: ChatAreaProps) 
                           {isToday(new Date(msg.createdAt))
                             ? "Today"
                             : isYesterday(new Date(msg.createdAt))
-                            ? "Yesterday"
-                            : format(new Date(msg.createdAt), "MMMM d, yyyy")}
+                              ? "Yesterday"
+                              : format(new Date(msg.createdAt), "MMMM d, yyyy")}
                         </span>
                         <div className="flex-1 h-px bg-white/[0.05]" />
                       </div>
@@ -301,8 +324,8 @@ export function ChatArea({ type, id, name, targetUserIds = [] }: ChatAreaProps) 
                     >
                       {/* Avatar column */}
                       {!isContinuation ? (
-                        <div className="relative shrink-0 mt-0.5" 
-                             onClick={() => setSelectedProfileId(msg.senderId)}
+                        <div className="relative shrink-0 mt-0.5"
+                          onClick={() => setSelectedProfileId(msg.senderId)}
                         >
                           {(msg as any).senderAvatarUrl ? (
                             <img
@@ -330,7 +353,7 @@ export function ChatArea({ type, id, name, targetUserIds = [] }: ChatAreaProps) 
                         {/* Header: username + timestamp */}
                         {!isContinuation && (
                           <div className="flex items-baseline gap-2 mb-0.5">
-                            <span 
+                            <span
                               onClick={() => setSelectedProfileId(msg.senderId)}
                               className={cn(
                                 "font-semibold text-[13px] leading-tight hover:underline cursor-pointer",
@@ -381,6 +404,31 @@ export function ChatArea({ type, id, name, targetUserIds = [] }: ChatAreaProps) 
 
       {/* ── Input Area ── */}
       <div className="px-6 pb-5 pt-3 relative z-20 bg-black/20 backdrop-blur-sm border-t border-white/[0.02]">
+
+        {/* Typing Notification Banner */}
+        <AnimatePresence>
+          {typingUsers.length > 0 && typeof window !== "undefined" && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="absolute -top-7 left-6 right-6 flex items-center gap-2 pointer-events-none"
+            >
+              <TypingIndicator size="sm" className="bg-transparent border-none px-0" />
+              <span className="text-[11px] font-medium text-white/50 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/5 shadow-xl">
+                <strong className="text-white/80 font-semibold">
+                  {typingUsers.length === 1
+                    ? typingUsers[0]
+                    : typingUsers.length === 2
+                      ? `${typingUsers[0]} and ${typingUsers[1]}`
+                      : "Several people"}
+                </strong>
+                {" "}is typing...
+              </span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <div className="relative group">
           {/* Focus glow ring */}
           <div className="absolute -inset-[1px] bg-gradient-to-r from-primary/25 via-violet-500/25 to-primary/25 rounded-2xl blur-sm opacity-0 group-focus-within:opacity-100 transition-opacity duration-400" />
@@ -393,7 +441,7 @@ export function ChatArea({ type, id, name, targetUserIds = [] }: ChatAreaProps) 
               autoFocus
               type="text"
               value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
+              onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               placeholder={`Message ${name}…`}
               className="flex-1 bg-transparent border-none focus:outline-none text-white placeholder:text-white/25 text-sm font-normal"
@@ -410,7 +458,7 @@ export function ChatArea({ type, id, name, targetUserIds = [] }: ChatAreaProps) 
         </div>
       </div>
 
-      <ProfilePopup 
+      <ProfilePopup
         userId={selectedProfileId || 0}
         isOpen={selectedProfileId !== null}
         onClose={() => setSelectedProfileId(null)}
